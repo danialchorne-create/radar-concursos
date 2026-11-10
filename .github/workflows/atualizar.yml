@@ -1,0 +1,38 @@
+
+name: Atualizar concursos
+
+on:
+  schedule:
+    # 07h e 19h no horário de Brasília
+    - cron: '0 10,22 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  busca:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Baixar arquivos do projeto
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Buscar concursos
+        run: python update.py
+
+      - name: Salvar resultados
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/concursos.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Atualização automática de concursos"
+            git push
+          fi
