@@ -1,54 +1,5 @@
 {
-  "updated_at": "2026-11-11T10:56:08.007334+00:00",
-  "note": "Triagem de notícias públicas dos últimos 30 dias. Não garante inscrições abertas nem lotação. ",
-  "items": [
-    {
-      "id": "3504f7494e5686f7",
-      "title": "Defensoria Pública de São Paulo abre concurso para 70 vagas de defensor público - Mundo RH",
-      "organizer": "Mundo RH",
-      "area": "Direito",
-      "salary": null,
-      "deadline": null,
-      "status": "a_verificar",
-      "location": "São Paulo citada — confirmar lotação",
-      "location_status": "uncertain",
-      "summary": "Defensoria Pública de São Paulo abre concurso para 70 vagas de defensor público Mundo RH",
-      "source_url": "https://news.google.com/rss/articles/CBMipgFBVV95cUxNSkJNMVRVbGozajRlRVBkMlU5c3FKekFEOVRNc0ZEVWJTcGhPNHppLTBCWXFELS1DNi1YOGxiOHBselA3SVMtaDdQV2NOTm92aWNEMGFUVS1DUFlhQ3hKQWFPcGlkQjluUHYtdk9VMjdTekNQazNkZWdzQmtIZE5VQWVxVElqTHRrc2p3U0lSdmM2Wnplc01VZTZkVUdLVFJjbG1PV01B0gGrAUFVX3lxTE9EclotTVM2TDAySVVlU29TaW5NQlI1WDgxdkY5TWNiaUJUVWtXMkNTRUdmTmYyWEZwWmVEbFhUZk81QS0tNVVNNGV0R0JIbTMySHV2a0dKT2dnbXpZcDZGcDRfVnU1VG1kM0lsblh2VWhzQ1YzZXo0SzhQXzN6bURvaS1EeV8wa3JJcEt4R2pzeXlwaGVySTJmMm5UTEdQSmdSNTJVVlFPbU9DOA?oc=5",
-      "edital_url": null,
-      "registration_url": null,
-      "published": "2026-11-07"
-    },
-    {
-      "id": "7ab7c860621afd44",
-      "title": "UNIVERSIDADE DE SÃO PAULO FACULDADE DE MEDICINA DE RIBEIRÃO PRETO SERVIÇO DE PÓS-GRADUAÇÃO Comunicado Edital-SPG/FMRP-USP - CPG FMRP",
-      "organizer": "CPG FMRP",
-      "area": "Medicina",
-      "salary": null,
-      "deadline": null,
-      "status": "a_verificar",
-      "location": "Outra cidade citada — verificar",
-      "location_status": "uncertain",
-      "summary": "UNIVERSIDADE DE SÃO PAULO FACULDADE DE MEDICINA DE RIBEIRÃO PRETO SERVIÇO DE PÓS-GRADUAÇÃO Comunicado Edital-SPG/FMRP-USP CPG FMRP",
-      "source_url": "https://news.google.com/rss/articles/CBMigAFBVV95cUxObDFlQThmb1E5d2JzTWdyeFRhUUhYRUV2dlNfMHhIUVNkbjl0QjZyaTlTYlM3ZEprMXJDdUFvZGcwbjlVTjhFTU1iUkpDekdMd3BwREdTVF95djQ0eGQtalVLUDdPdVdVdnlqQ3ZjcW5HaXlPcmZpd3NVNzVCN3JMWQ?oc=5",
-      "edital_url": null,
-      "registration_url": null,
-      "published": "2026-10-21"
-    },
-    {
-      "id": "115e30e963a906e0",
-      "title": "Inscrições abertas para o concurso da Defensoria Pública de São Paulo - Impacto Notícias",
-      "organizer": "Impacto Notícias",
-      "area": "Direito",
-      "salary": null,
-      "deadline": null,
-      "status": "a_verificar",
-      "location": "São Paulo citada — confirmar lotação",
-      "location_status": "uncertain",
-      "summary": "Inscrições abertas para o concurso da Defensoria Pública de São Paulo Impacto Notícias",
-      "source_url": "https://news.google.com/rss/articles/CBMi2wFBVV95cUxPY09mS2FiMC12dDJDNVNfWXFJM3NnRFdfeEhwZ3BleHZYM2lDaTdKR0pyeVJPVDg3MXFENEFLVWFjaTV2MDc0ajRvM0kwdjlka2lQaTV2b3VYcDVUM04zUDdYS2dYOGlkLXZkWmQyREkxNDVYYjlSWnQwNy02Ymd1UXZOZjhzSDMxQ2dyNXVTVzZOajItQk44YmFEQ1ZicXBNQlVTLU1yVWk4dGkzZmZ3azVDUXBEX3Z4N0ZHcFdZSktBMG9sTDBSZkVWU0RLV1pFU2ZLb2w0TmZZa2M?oc=5",
-      "edital_url": null,
-      "registration_url": null,
-      "published": "2026-10-14"
-    }
-  ]
+  "updated_at": "2026-11-11T22:24:05.319815+00:00",
+  "note": "Triagem restrita a notícias sobre cargos públicos. Exclui seleções acadêmicas. Prazo e lotação ainda dependem de conferência no edital. ",
+  "items": []
 }
