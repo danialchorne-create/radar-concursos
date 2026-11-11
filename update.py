@@ -217,62 +217,113 @@ def find_official_links(url):
         return edital,registration,final
     except Exception:return None,None,url
 
+# A etapa seguinte publica SOMENTE inscrições em andamento com informações
+# explícitas. Notícias não verificadas NÃO aparecem no painel do candidato.
+import unicodedata
+
+def normalized(t):
+    return ''.join(c for c in unicodedata.normalize('NFKD', (t or '').lower()) if not unicodedata.combining(c))
+
+NOT_APPLICATION = (
+    'resultado', 'resultados', 'gabarito', 'nota de corte', 'notas da prova',
+    'notas do concurso', 'classificacao', 'classificados', 'convocacao',
+    'convocados', 'homologacao', 'prova aplicada', 'local de prova',
+    'retificacao de resultado', 'concurso anterior', 'concurso passado',
+    'nomeacao', 'nomeados', 'inscricoes encerradas', 'prazo encerrado',
+    'inscricoes prorrogadas em 2025', 'mestrado', 'doutorado',
+    'pos-graduacao', 'vestibular', 'residencia medica', 'curso gratuito',
+    'bolsas de estudo', 'policia civil do acre',
+)
+OPEN_SIGNALS = ('inscricoes abertas', 'inscricao aberta', 'inscreva-se', 'periodo de inscricoes', 'inscricoes ate', 'inscricoes vao ate')
+CITY_STRICT = (
+    'santo andre','sao bernardo do campo','sao caetano do sul','maua',
+    'diadema','ribeirao pires','rio grande da serra','osasco',
+    'taboao da serra','barueri','guarulhos',
+)
+CITY_CAPITAL_SIGNALS = ('sao paulo capital', 'capital paulista', 'cidade de sao paulo', 'municipio de sao paulo', 'prefeitura de sao paulo')
+
+# Permitimos cidade somente quando nomeada explicitamente, não apenas "SP"
+# ou "Estado de São Paulo". Evita aceitar Acre e qualquer outro estado.
+def city_strict(t):
+    x=normalized(t)
+    for c in CITY_STRICT:
+        if has_place(x,c):return c.title()
+    if any(z in x for z in CITY_CAPITAL_SIGNALS):return 'São Paulo (capital)'
+    return None
+
+def extract_deadline(t):
+    x=normalized(t)
+    patterns=(
+        r'inscricoes?\s+(?:abertas?\s+)?ate\s+(?:o\s+dia\s+)?(\d{1,2})\s*(?:/|de\s+)(\d{1,2}|[a-z]+)\s*(?:/|de\s+)(20\d{2})',
+        r'(?:inscricoes?\s+se\s+encerram|prazo\s+de\s+inscricao\s+termina)\s+(?:em|no\s+dia)\s+(\d{1,2})\s*(?:/|de\s+)(\d{1,2}|[a-z]+)\s*(?:/|de\s+)(20\d{2})',
+    )
+    for pat in patterns:
+        for m in re.finditer(pat,x,re.I):
+            mon=m.group(2)
+            mon=int(mon) if mon.isdigit() else MONTHS.get(mon)
+            if not mon:continue
+            try: date=dt.date(int(m.group(3)),mon,int(m.group(1)))
+            except ValueError:continue
+            if TODAY <= date <= TODAY+dt.timedelta(days=120):return date.isoformat()
+    return None
+
+def application_signal(title, body):
+    title_n=normalized(title); combined=normalized(title+' '+body)
+    # A notícia precisa anunciar INSCRIÇÕES, e não resultados de um concurso.
+    if any(term in title_n for term in NOT_APPLICATION):return False
+    if not any(term in combined for term in OPEN_SIGNALS):return False
+    if not any(term in combined for term in ('concurso publico','concurso para','edital de concurso','processo seletivo publico')):return False
+    if not any(normalized(word) in combined for word in JOB_TERMS):return False
+    return True
+
 def main():
-    old={}
-    if DATA.exists():
-        try:old={x['id']:x for x in json.loads(DATA.read_text(encoding='utf8')).get('items',[])}
-        except (ValueError,KeyError):pass
-    found=[]; errors=[]
+    found=[];errors=[]
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
         futures={pool.submit(rss,q):q for q in QUERIES}
         for future in concurrent.futures.as_completed(futures):
-            try: found.extend(future.result())
+            try:found.extend(future.result())
             except Exception as ex:errors.append(f'{futures[future]}: {type(ex).__name__}')
     unique={}
-    for f in found:
-        if f['url']:unique.setdefault(f['url'],f)
+    for article in found:
+        if article['url']:unique.setdefault(article['url'],article)
     candidates=[]
-    filter_counts={'sem_indicio_de_cargo_publico':0,'cidade_fora':0,'salario_abaixo_piso':0}
+    rejects={'nao_e_inscricao_aberta':0,'sem_cidade_confirmada':0,'sem_prazo_valido':0,'sem_salario_confirmado':0,'sem_fonte_oficial':0}
     for r in unique.values():
-        t=(r['title']+' '+r['description'])
-        if not relevant(t):
-            filter_counts['sem_indicio_de_cargo_publico']+=1
-            continue
-        location,locstatus=loc_from(t)
-        if locstatus=='outside':
-            filter_counts['cidade_fora']+=1
-            continue
-        amount=salary_from(t)
-        if amount is not None and amount < 12000:
-            filter_counts['salario_abaixo_piso']+=1
-            continue
-        deadline=deadline_from(t)
-        if deadline is not None and deadline<TODAY.isoformat():continue
-        rid=hashlib.sha256((r['title'].lower()+r['url']).encode('utf8')).hexdigest()[:16]
-        item={'id':rid,'title':r['title'][:175],'organizer':r['publisher'][:100], 'area':identify_area(t),'salary':amount, 'deadline':deadline, 'status':'prazo_identificado' if deadline else 'a_verificar', 'location':location, 'location_status':locstatus,'summary':r['description'][:260] or 'Leia a fonte e o edital para confirmar as informações.', 'source_url':r['url'], 'edital_url':None,'registration_url':None,'published':r['published']}
-        if rid in old:
-            prev=old[rid]
-            item['edital_url']=prev.get('edital_url')
-            item['registration_url']=prev.get('registration_url')
-        candidates.append(item)
+        headline=r['title']; snippet=r['description']; txt=headline+' '+snippet
+        if not application_signal(headline,snippet):
+            rejects['nao_e_inscricao_aberta']+=1;continue
+        # Endereço de trabalho tem que ser inequívoco já no anúncio.
+        city=city_strict(txt)
+        if city is None:
+            rejects['sem_cidade_confirmada']+=1;continue
+        deadline=extract_deadline(txt)
+        if not deadline:
+            rejects['sem_prazo_valido']+=1;continue
+        amount=salary_from(txt)
+        if amount is None or amount < 12000:
+            rejects['sem_salario_confirmado']+=1;continue
+        # O link do Google Notícias pode apontar para uma reportagem.
+        # Exibimos apenas quando a URL final é de órgão/banca oficial.
+        edital,registration,final=find_official_links(r['url'])
+        if not url_is_official(final):
+            rejects['sem_fonte_oficial']+=1;continue
+        rid=hashlib.sha256((headline.lower()+final).encode('utf8')).hexdigest()[:16]
+        candidates.append({
+            'id':rid,'title':headline[:175], 'organizer':r['publisher'][:100],
+            'area':identify_area(txt),'salary':amount,'deadline':deadline,
+            'status':'prazo_identificado','location':city+' — confirmar unidade no edital',
+            'location_status':'capital_abc','summary':snippet[:260],
+            'source_url':final,'edital_url':edital,'registration_url':registration,
+            'published':r['published']
+        })
     candidates.sort(key=lambda x:x['published'],reverse=True)
-    # Limit external page fetches to minimize burden and avoid Google News redirect parsing.
-    for item in candidates[:35]:
-        if item['edital_url'] and item['registration_url']:continue
-        edital,registration,resolved=find_official_links(item['source_url'])
-        item['edital_url']=item['edital_url'] or edital
-        item['registration_url']=item['registration_url'] or registration
-        if url_is_official(resolved):item['source_url']=resolved
-    if errors and not found and old:
-        # Don't wipe a prior successful set on total upstream failure.
-        candidates=list(old.values())
-        note='Erro nas buscas atuais; exibindo a última coleta disponível. Conferir os prazos manualmente.'
-    else:
-        note=('Triagem restrita a notícias sobre cargos públicos. Exclui seleções acadêmicas. Prazo e lotação ainda dependem de conferência no edital. '
-              + (f'{len(errors)} consulta(s) falharam nesta atualização.' if errors else ''))
-    output={'updated_at':dt.datetime.now(dt.timezone.utc).isoformat(),'note':note,'items':candidates[:150]}
+    note=('Filtro conservador: somente notícias com prazo de inscrição vigente, salário >= R$ 12 mil, cidade explícita e fonte oficial. '
+          'A presença no painel NÃO comprova a lotação ou a elegibilidade: confira sempre o edital. '
+          'O radar pode omitir concursos reais por falta de informação na notícia.')
+    if errors:note+=f' {len(errors)} consultas falharam.'
+    result={'updated_at':dt.datetime.now(dt.timezone.utc).isoformat(),'note':note,'items':candidates[:150]}
     DATA.parent.mkdir(exist_ok=True,parents=True)
-    DATA.write_text(json.dumps(output,indent=2,ensure_ascii=False)+'\n',encoding='utf8')
-    print(f'{len(found)} notícias, {len(unique)} únicas, {len(candidates)} candidatos, {len(errors)} erros; descartes: {filter_counts}')
+    DATA.write_text(json.dumps(result,indent=2,ensure_ascii=False)+'\n',encoding='utf8')
+    print(f'{len(found)} notícias, {len(unique)} únicas, {len(candidates)} anúncios com evidência de inscrição, {len(errors)} erros; descartes: {rejects}')
 
 if __name__=='__main__':main()
