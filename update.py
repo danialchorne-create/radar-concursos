@@ -20,35 +20,81 @@ from email.utils import parsedate_to_datetime
 BASE = Path(__file__).parent
 DATA = BASE / 'data' / 'concursos.json'
 TODAY = dt.datetime.now(dt.timezone(dt.timedelta(hours=-3))).date()
+# Consultas focadas em CARGOS PÚBLICOS, não seleções acadêmicas.
 QUERIES = [
-    'concurso inscrições abertas "procurador" "São Paulo" salário',
-    'concurso inscrições abertas "auditor fiscal" "São Paulo" edital',
-    'concurso inscrições abertas "médico" "São Paulo" remuneração',
-    'concurso inscrições abertas "médico" "Santo André" salário',
-    'concurso inscrições abertas "médico" "São Bernardo do Campo" salário',
-    'concurso inscrições abertas "médico" "São Caetano do Sul" salário',
-    'concurso inscrições abertas "procurador" "Santo André"',
-    'concurso inscrições abertas "procurador" "São Bernardo do Campo"',
-    'concurso inscrições abertas "procurador" "São Caetano do Sul"',
-    'concurso inscrições abertas "analista judiciário" "São Paulo"',
-    'concurso inscrições abertas "oficial de justiça" "São Paulo"',
-    'concurso inscrições abertas "perito médico" "São Paulo"',
-    'concurso inscrições abertas "economista" "São Paulo"',
-    'concurso inscrições abertas "auditor controle externo" "São Paulo"',
-    'concurso inscrições abertas "defensor público" "São Paulo"',
-    'site:prefeitura.sp.gov.br concurso inscrições médico procurador',
-    'site:tjsp.jus.br concurso edital inscrições',
-    'site:trf3.jus.br concurso edital inscrições',
-    'site:tce.sp.gov.br concurso auditor inscrições',
-    'site:usp.br concurso médico inscrições',
+    'concurso público inscrições abertas procurador São Paulo remuneração',
+    'concurso público inscrições abertas auditor fiscal São Paulo salário',
+    'concurso público inscrições abertas médico São Paulo remuneração',
+    'concurso público inscrições abertas analista judiciário São Paulo salário',
+    'concurso público inscrições abertas oficial justiça São Paulo',
+    'concurso público inscrições abertas perito médico São Paulo',
+    'concurso público inscrições abertas economista São Paulo',
+    'concurso público inscrições abertas defensor público São Paulo',
+    'concurso público inscrições abertas auditor controle externo São Paulo',
+    'concurso público edital médico procurador Santo André',
+    'concurso público edital médico procurador São Bernardo do Campo',
+    'concurso público edital médico procurador São Caetano do Sul',
+    'concurso público edital médico procurador Mauá Diadema',
+    'concurso público inscrições abertas médico procurador Osasco',
+    'concurso público inscrições abertas auditor médico Taboão da Serra',
+    'concurso público inscrições abertas procurador médico Barueri',
+    'concurso público inscrições abertas procurador médico Guarulhos',
+    'site:prefeitura.sp.gov.br concurso público edital médico procurador',
+    'site:tjsp.jus.br concurso público servidor edital inscrições',
+    'site:trf3.jus.br concurso público servidor edital inscrições',
+    'site:tce.sp.gov.br concurso público auditor inscrições',
+    'site:osasco.sp.gov.br concurso público cargos inscrições',
+    'site:guarulhos.sp.gov.br concurso público cargos inscrições',
+    'site:barueri.sp.gov.br concurso público cargos inscrições',
+    'site:taboaodaserra.sp.gov.br concurso público cargos inscrições',
 ]
+
 AREAS = {
     'Medicina': ['médico', 'médica', 'medicina', 'cirurgião', 'perito médico', 'medico', 'saúde'],
     'Direito': ['procurador', 'defensor', 'promotor', 'magistratura', 'juiz', 'advogado', 'oficial de justiça', 'analista judiciário', 'jurídic', 'juridic', 'delegado'],
     'Economia e Finanças': ['auditor', 'economista', 'fiscal', 'finanças', 'tributári', 'contáb', 'controle externo'],
 }
-LOCATIONS = ['são paulo', 'sao paulo', 'santo andré', 'santo andre', 'são bernardo', 'sao bernardo', 'são caetano', 'sao caetano', 'mauá', 'maua', 'diadema', 'ribeirão pires', 'rio grande da serra']
-FAR = ['suzano', 'jandira', 'jundiaí', 'jundiai', 'campinas', 'santos', 'sorocaba', 'ribeirão preto', 'ribeirao preto', 'presidente prudente', 'bauru', 'guarulhos', 'osasco']
+# Termos de localização devem ser checados com fronteiras de palavra.
+CITY_NAMES = [
+    'santo andré', 'santo andre', 'são bernardo do campo', 'sao bernardo do campo',
+    'são caetano do sul', 'sao caetano do sul', 'mauá', 'maua', 'diadema',
+    'ribeirão pires', 'ribeirao pires', 'rio grande da serra',
+    'osasco', 'taboão da serra', 'taboao da serra', 'barueri', 'guarulhos',
+]
+CAPITAL = ['são paulo', 'sao paulo']
+OTHER_CITIES = [
+    'suzano', 'jandira', 'jundiaí', 'jundiai', 'campinas', 'santos',
+    'sorocaba', 'ribeirão preto', 'ribeirao preto', 'presidente prudente',
+    'bauru', 'cotia', 'carapicuíba', 'carapicuiba', 'embu das artes',
+    'mogi das cruzes', 'praia grande', 'são vicente', 'sao vicente',
+]
+# Esses termos geralmente identificam seleção acadêmica, NÃO um cargo remunerado.
+ACADEMIC_REJECTION = [
+    'processo seletivo de mestrado', 'seleção para mestrado',
+    'selecao para mestrado', 'inscrições para mestrado', 'inscricoes para mestrado',
+    'vagas para mestrado', 'mestrado profissional', 'mestrado acadêmico',
+    'mestrado academico', 'programa de pós-graduação', 'programa de pos-graduacao',
+    'ingresso no mestrado', 'curso de mestrado', 'doutorado acadêmico',
+    'doutorado academico', 'bolsa de estudo', 'bolsas de estudo',
+    'vestibular', 'processo seletivo discente', 'seleção de alunos',
+    'selecao de alunos', 'residência médica', 'residencia medica',
+    'seleção para residência', 'selecao para residencia', 'pós-graduação lato sensu',
+    'pos-graduacao lato sensu', 'inscrições para cursos', 'inscricoes para cursos',
+    'especialização gratuita', 'especializacao gratuita',
+]
+# Indicadores de cargos, evitando a palavra genérica "concurso" como prova de pertinência.
+JOB_TERMS = [
+    'procurador', 'médico', 'medico', 'cirurgião', 'cirurgiao',
+    'perito', 'auditor', 'fiscal', 'economista', 'defensor público',
+    'defensor publico', 'promotor de justiça', 'promotor de justica',
+    'juiz', 'magistratura', 'analista judiciário', 'analista judiciario',
+    'oficial de justiça', 'oficial de justica', 'delegado', 'advogado',
+    'analista de controle', 'analista tributário', 'analista tributario',
+    'analista administrativo', 'servidor público', 'servidor publico',
+    'nível superior', 'nivel superior', 'cargo público', 'cargo publico',
+    'carreira pública', 'carreira publica',
+]
+
 MONTHS = {'janeiro':1,'fevereiro':2,'março':3,'marco':3,'abril':4,'maio':5,'junho':6,'julho':7,'agosto':8,'setembro':9,'outubro':10,'novembro':11,'dezembro':12}
 SALARY = re.compile(r'R\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?|\d{4,7}(?:,\d{2})?)', re.I)
 DATE = re.compile(r'\b(?:até|ate|encerra(?:m)?(?: em)?|inscriç(?:ões|oes) até|prazo até)\s*(?:o dia |dia )?(\d{1,2})\s*(?:/|de\s+)(\d{1,2}|[a-zçãé]+)\s*(?:/|de\s+)(20\d{2})\b', re.I)
@@ -104,21 +150,47 @@ def identify_area(t):
     winner=max(scores,key=scores.get)
     return winner if scores[winner] else 'Geral'
 
+def has_place(text, term):
+    return bool(re.search(r'(?<!\w)' + re.escape(term) + r'(?!\w)', text, re.I))
+
 def loc_from(t):
-    lower=t.lower()
-    # SP in a generic headline can describe the state, not a confirmed workplace.
-    found=[x for x in LOCATIONS if x in lower]
-    far=any(x in lower for x in FAR)
-    if far and not any(x in lower for x in LOCATIONS[2:]):return 'Outra cidade citada — verificar', 'uncertain'
-    if any(x in lower for x in LOCATIONS[2:]):return 'ABC citado — confirmar no edital','capital_abc'
-    if 'são paulo' in lower or 'sao paulo' in lower:return 'São Paulo citada — confirmar lotação','uncertain'
+    low=t.lower()
+    included=next((city for city in CITY_NAMES if has_place(low,city)),None)
+    outside=next((city for city in OTHER_CITIES if has_place(low,city)),None)
+    if included and outside:
+        return 'Cidades diferentes citadas — conferir lotação','uncertain'
+    if included:
+        return included.title()+' citada — confirmar lotação','capital_abc'
+    if outside:
+        return 'Outra cidade ('+outside.title()+') — fora da região','outside'
+    if any(has_place(low,x) for x in CAPITAL):
+        # "São Paulo" pode referir-se ao ESTADO, não necessariamente à capital.
+        return 'São Paulo citada — confirmar se é capital','uncertain'
     return 'Lotação a verificar','uncertain'
 
 def relevant(text):
-    l=text.lower()
-    if not any(k in l for k in ['concurso','edital','seleção pública','selecao publica']):return False
-    if not any(k in l for k in LOCATIONS):return False
-    if not any(w in l for terms in AREAS.values() for w in terms) and 'nível superior' not in l:return False
+    low=text.lower()
+    # Primeiro exclui cursos e processos seletivos acadêmicos mesmo quando falam "edital".
+    if any(term in low for term in ACADEMIC_REJECTION):
+        return False
+    # Notícias de concursos para cargos públicos, sem aceitar "edital" isolado.
+    if not any(term in low for term in ('concurso público','concurso publico',
+                    'concurso para servidores','concurso de servidores',
+                    'seleção pública para contratação','selecao publica para contratacao',
+                    'processo seletivo para contratação','processo seletivo para contratacao',
+                    'processo seletivo simplificado para médicos',
+                    'edital de concurso','concurso abre','concurso oferece')):
+        return False
+    if not any(term in low for term in JOB_TERMS):
+        return False
+    if not any(has_place(low,x) for x in CITY_NAMES+CAPITAL):
+        return False
+    # Evita notícias sobre resultado de provas antigas e inscrições fechadas.
+    if any(phrase in low for phrase in ('inscrições encerradas','inscricoes encerradas',
+            'prazo de inscrição encerrado','prazo de inscricao encerrado',
+            'resultado final publicado','gabarito definitivo',
+            'homologação do resultado','homologacao do resultado')):
+        return False
     return True
 
 def url_is_official(url):
@@ -162,12 +234,13 @@ def main():
     for r in unique.values():
         t=(r['title']+' '+r['description'])
         if not relevant(t):continue
+        location,locstatus=loc_from(t)
+        if locstatus=='outside':continue
         amount=salary_from(t)
         if amount is not None and amount < 12000:continue
         deadline=deadline_from(t)
         if deadline is not None and deadline<TODAY.isoformat():continue
         rid=hashlib.sha256((r['title'].lower()+r['url']).encode('utf8')).hexdigest()[:16]
-        location,locstatus=loc_from(t)
         item={'id':rid,'title':r['title'][:175],'organizer':r['publisher'][:100], 'area':identify_area(t),'salary':amount, 'deadline':deadline, 'status':'prazo_identificado' if deadline else 'a_verificar', 'location':location, 'location_status':locstatus,'summary':r['description'][:260] or 'Leia a fonte e o edital para confirmar as informações.', 'source_url':r['url'], 'edital_url':None,'registration_url':None,'published':r['published']}
         if rid in old:
             prev=old[rid]
@@ -187,7 +260,7 @@ def main():
         candidates=list(old.values())
         note='Erro nas buscas atuais; exibindo a última coleta disponível. Conferir os prazos manualmente.'
     else:
-        note=('Triagem de notícias públicas dos últimos 30 dias. Não garante inscrições abertas nem lotação. '
+        note=('Triagem restrita a notícias sobre cargos públicos. Exclui seleções acadêmicas. Prazo e lotação ainda dependem de conferência no edital. '
               + (f'{len(errors)} consulta(s) falharam nesta atualização.' if errors else ''))
     output={'updated_at':dt.datetime.now(dt.timezone.utc).isoformat(),'note':note,'items':candidates[:150]}
     DATA.parent.mkdir(exist_ok=True,parents=True)
