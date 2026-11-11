@@ -169,29 +169,30 @@ def loc_from(t):
     return 'Lotação a verificar','uncertain'
 
 def relevant(text):
+    """Triagem de notícias: mantém oportunidades para revisão sem inventar requisitos.
+    RSS do Google Notícias costuma trazer título repetido na descrição e não o edital.
+    """
     low=text.lower()
-    # Primeiro exclui cursos e processos seletivos acadêmicos mesmo quando falam "edital".
     if any(term in low for term in ACADEMIC_REJECTION):
         return False
-    # Notícias de concursos para cargos públicos, sem aceitar "edital" isolado.
-    if not any(term in low for term in ('concurso público','concurso publico',
-                    'concurso para servidores','concurso de servidores',
-                    'seleção pública para contratação','selecao publica para contratacao',
-                    'processo seletivo para contratação','processo seletivo para contratacao',
-                    'processo seletivo simplificado para médicos',
-                    'edital de concurso','concurso abre','concurso oferece')):
+    # Exclusões complementares de ingresso em cursos / vagas de alunos.
+    if any(term in low for term in ('pós-graduação', 'pos-graduacao',
+            'seleção de estudantes', 'selecao de estudantes',
+            'curso gratuito', 'concurso cultural', 'concurso literário')):
         return False
-    if not any(term in low for term in JOB_TERMS):
-        return False
-    if not any(has_place(low,x) for x in CITY_NAMES+CAPITAL):
-        return False
-    # Evita notícias sobre resultado de provas antigas e inscrições fechadas.
+    # Não exibir listas de resultados, provas antigas e inscrições já encerradas.
     if any(phrase in low for phrase in ('inscrições encerradas','inscricoes encerradas',
             'prazo de inscrição encerrado','prazo de inscricao encerrado',
             'resultado final publicado','gabarito definitivo',
             'homologação do resultado','homologacao do resultado')):
         return False
-    return True
+    # Identificador genérico de processo seletivo E pelo menos um cargo profissional.
+    public_selection = any(term in low for term in (
+        'concurso', 'edital', 'processo seletivo', 'seleção pública',
+        'selecao publica', 'inscrições abertas', 'inscricoes abertas',
+        'vagas para', 'vagas de'))
+    professional_job = any(term in low for term in JOB_TERMS)
+    return public_selection and professional_job
 
 def url_is_official(url):
     try: host=urllib.parse.urlparse(url).hostname or ''
@@ -231,13 +232,20 @@ def main():
     for f in found:
         if f['url']:unique.setdefault(f['url'],f)
     candidates=[]
+    filter_counts={'sem_indicio_de_cargo_publico':0,'cidade_fora':0,'salario_abaixo_piso':0}
     for r in unique.values():
         t=(r['title']+' '+r['description'])
-        if not relevant(t):continue
+        if not relevant(t):
+            filter_counts['sem_indicio_de_cargo_publico']+=1
+            continue
         location,locstatus=loc_from(t)
-        if locstatus=='outside':continue
+        if locstatus=='outside':
+            filter_counts['cidade_fora']+=1
+            continue
         amount=salary_from(t)
-        if amount is not None and amount < 12000:continue
+        if amount is not None and amount < 12000:
+            filter_counts['salario_abaixo_piso']+=1
+            continue
         deadline=deadline_from(t)
         if deadline is not None and deadline<TODAY.isoformat():continue
         rid=hashlib.sha256((r['title'].lower()+r['url']).encode('utf8')).hexdigest()[:16]
@@ -265,6 +273,6 @@ def main():
     output={'updated_at':dt.datetime.now(dt.timezone.utc).isoformat(),'note':note,'items':candidates[:150]}
     DATA.parent.mkdir(exist_ok=True,parents=True)
     DATA.write_text(json.dumps(output,indent=2,ensure_ascii=False)+'\n',encoding='utf8')
-    print(f'{len(found)} notícias, {len(unique)} únicas, {len(candidates)} candidatos, {len(errors)} erros')
+    print(f'{len(found)} notícias, {len(unique)} únicas, {len(candidates)} candidatos, {len(errors)} erros; descartes: {filter_counts}')
 
 if __name__=='__main__':main()
