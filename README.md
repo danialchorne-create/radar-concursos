@@ -41,3 +41,16 @@ Acesse `http://localhost:8000`. Para gerar dados, execute `python3 update.py` em
 ## Personalização
 
 Edite a lista `QUERIES` em `update.py` para ampliar/restringir a pesquisa. O limite salarial está em `if amount is not None and amount < 12000`. O monitoramento *não* verifica limites etários ou requisitos profissionais; essas verificações só podem ser feitas lendo o edital.
+
+
+## Atualização de critérios — novembro/2026
+
+- Inclui **Osasco, Taboão da Serra, Barueri e Guarulhos**, além de São Paulo capital e ABC.
+- Exclui automaticamente notícias sobre inscrição em mestrado, doutorado, vestibular, residência médica e cursos acadêmicos.
+- Exige indicadores de **concurso para cargo público** e de cargo de interesse, não apenas a palavra "edital".
+- Exclui salários identificados abaixo de R$ 12.000; resultados sem salário explícito ficam **ocultos por padrão** no site, mas podem ser mostrados para revisão.
+- "Cidade citada" **não comprova lotação**; confira sempre o edital.
+- Google Notícias pode retornar notícias incompletas ou anúncios de concursos antigos; o radar é triagem inicial, **não certificação de inscrição aberta**.
+
+### Como atualizar seu repositório
+No GitHub, abra `update.py` e `index.html`, clique no ícone do lápis, substitua o conteúdo pelo dos arquivos desta versão e confirme cada alteração. Depois rode `Actions > Atualizar concursos > Run workflow` para substituir os resultados antigos em `data/concursos.json`.
