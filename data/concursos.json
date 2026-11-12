@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-12T03:54:09.700213+00:00",
+  "updated_at": "2026-11-12T03:55:02.244825+00:00",
   "note": "Fontes oficiais e bancas. As vagas em destaque passaram por validação automatizada; confira edital, cargo, salário, lotação e disponibilidade antes de se inscrever. A coleta não é exaustiva.",
   "items": [],
   "review": [
@@ -106,9 +106,20 @@
     "Vunesp - Osasco: HTTPError",
     "FCC - inscrições abertas: SSLError"
   ],
+  "news_diagnostic": {
+    "rss_items": 363,
+    "sample_titles": [
+      "USP abre concurso público para médico-veterinário na área de animais de experimentação - - CRMV-RJ",
+      "HCFMRP - USP abre concurso público para médico na área de alergia e imunologia - PCI Concursos",
+      "Prefeitura de Leme SP publica edital nº 02/2026 de concurso com 29 vagas - Qconcursos Folha Dirigida",
+      "Concurso da PM de SP: inscrição para 2 mil vagas vai até 22 de dezembro; pedidos de isenção ou redução de taxa devem ser feitos at",
+      "Concurso HCRP-USP de Ribeirão Preto-SP abre concurso para três cargos - Ache Concursos",
+      "Concurso INSS: 10 mil + 2 mil vagas solicitadas. Acompanhe! - Blog Gran Cursos Online"
+    ]
+  },
   "diagnostico_descartes": {
-    "prazo_de_inscricao_nao_identificado": 27,
     "sem_contexto_de_concurso_ou_resultado": 80,
+    "prazo_de_inscricao_nao_identificado": 27,
     "cargo_nao_identificado": 133
   },
   "limitations": [
