@@ -385,7 +385,7 @@ NEWS_QUERIES = [
 NEWS_BLOCK = (
  'resultado','resultados','gabarito','gabaritos','notas','nota de corte',
  'classificacao','homologacao','convocacao','nomeacao','provas aplicadas',
- 'local de prova','data da prova','lista de aprovados','concurso encerrado',
+ 'local de prova','data da prova','lista de aprovados','concurso encerrado','retifica','retificacao','prorroga resultado',
  'inscricoes encerradas','mestrado','doutorado','residencia medica',
  'residencia multiprofissional','vestibular','bolsa de estudos',
  'curso gratuito','processo seletivo de alunos','pos-graduacao',
@@ -420,7 +420,7 @@ def news_lead(title, snippet, url, pubdate):
     # Só aceitar município explicitamente citado, não "Estado de SP".
     matches=[CITIES[c] for c in NEWS_CITIES if words_has(t,c)]
     capital=any(x in t for x in CAPITAL_MARKERS) or 'sao paulo (sp)' in t or 'cidade de sao paulo' in t
-    statewide=('sao paulo' in t or re.search(r'\bsp\b',t)) and not any(words_has(t,x) for x in NEWS_OUTSIDE)
+    statewide=any(x in t for x in ('tribunal de justica de sao paulo','tribunal de contas do estado de sao paulo','defensoria publica do estado de sao paulo','ministerio publico do estado de sao paulo','sefaz-sp','trf3','trf-3','tjsp','dpe-sp','tce-sp'))
     if not matches and not capital and not statewide:
         return None
     area=career(title,snippet)
@@ -439,10 +439,10 @@ def news_lead(title, snippet, url, pubdate):
     return {
       'id':hashlib.sha256(('news:'+url).encode()).hexdigest()[:16],
       'title':title[:210],'organizer':urlparse(url).hostname or 'Notícia',
-      'area':area,'salary':None,'deadline':None,
+      'area':area,'salary':salary,'deadline':None,
       'location':loc,'location_status':'uncertain','status':'revisao',
       'reason':'Notícia/portal de divulgação: conferir edital, inscrições, cargo, salário acima de R$ 15 mil e lotação. '
-               + ('Valor citado na notícia não comprova salário do cargo.' if salary else 'Salário ainda não comprovado.'),
+               + ('Valor citado na notícia não comprova salário do cargo.' if salary else 'Valor salarial divulgado na notícia ainda exige conferência no edital.'),
       'summary':snippet[:350],'source_url':url,
       'edital_url':None,'registration_url':None,'published':TODAY.isoformat()
     }
