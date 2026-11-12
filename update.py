@@ -414,8 +414,8 @@ def news_lead(title, snippet, url, pubdate):
     t=norm(title+' '+snippet)
     if any(x in title_n for x in NEWS_BLOCK):return None
     if any(words_has(t,x) for x in NEWS_OUTSIDE):return None
-    if not any(x in t for x in PUBLIC_JOBS):return None
-    if not any(x in t for x in OPEN_WORDS):return None
+    if not ('concurso' in t or 'edital' in t):return None
+    if not any(x in t for x in OPEN_WORDS) and 'concurso' not in title_n:return None
     if not any(words_has(t,x) for x in NEWS_CAREERS):return None
     # Só aceitar município explicitamente citado, não "Estado de SP".
     matches=[CITIES[c] for c in NEWS_CITIES if words_has(t,c)]
@@ -448,7 +448,7 @@ def news_lead(title, snippet, url, pubdate):
     }
 
 def discover_news():
-    leads=[];errors=[];seen=set()
+    leads=[];errors=[];seen=set();rss_total=0; examples=[]
     # Google Notícias RSS é uma fonte adicional, não o único mecanismo.
     for query in NEWS_QUERIES:
         try:
@@ -464,6 +464,8 @@ def discover_news():
                 date_tag=entry.find('pubDate')
                 if not title or not link:continue
                 u=link.get_text(strip=True)
+                rss_total+=1
+                if len(examples)<6: examples.append(title.get_text(' ',strip=True)[:130])
                 if u in seen:continue
                 seen.add(u)
                 snippet=BeautifulSoup(desc.get_text(' ',strip=True) if desc else '', 'html.parser').get_text(' ',strip=True)
@@ -472,10 +474,12 @@ def discover_news():
                 if lead:leads.append(lead)
         except Exception as exc:
             errors.append('Notícias: '+type(exc).__name__)
+    print('RSS notícias examinadas:',rss_total,'exemplos:',examples)
     return leads[:100],errors
 
 def main():
     links,errors=discover()
+    print('Amostra páginas:',links[:8])
     approved=[];review=[];discarded=0
     news,news_errors=discover_news()
     errors.extend(news_errors)
