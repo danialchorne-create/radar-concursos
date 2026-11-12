@@ -420,7 +420,8 @@ def news_lead(title, snippet, url, pubdate):
     # Só aceitar município explicitamente citado, não "Estado de SP".
     matches=[CITIES[c] for c in NEWS_CITIES if words_has(t,c)]
     capital=any(x in t for x in CAPITAL_MARKERS) or 'sao paulo (sp)' in t or 'cidade de sao paulo' in t
-    if not matches and not capital:
+    statewide=('sao paulo' in t or re.search(r'\bsp\b',t)) and not any(words_has(t,x) for x in NEWS_OUTSIDE)
+    if not matches and not capital and not statewide:
         return None
     area=career(title,snippet)
     if not area:return None
@@ -434,7 +435,7 @@ def news_lead(title, snippet, url, pubdate):
             if (datetime.now(timezone.utc)-d.astimezone(timezone.utc)).days>45:return None
         except (ValueError,TypeError,OverflowError):pass
     if not url.startswith('https://'):return None
-    loc=matches[0] if len(set(matches))==1 else ('São Paulo (capital)' if capital and not matches else 'Município a confirmar')
+    loc=matches[0] if len(set(matches))==1 else ('São Paulo (capital)' if capital and not matches else ('Estado de São Paulo — lotação não confirmada' if statewide and not matches else 'Município a confirmar'))
     return {
       'id':hashlib.sha256(('news:'+url).encode()).hexdigest()[:16],
       'title':title[:210],'organizer':urlparse(url).hostname or 'Notícia',
@@ -471,7 +472,7 @@ def discover_news():
                 if lead:leads.append(lead)
         except Exception as exc:
             errors.append('Notícias: '+type(exc).__name__)
-    return leads,errors
+    return leads[:100],errors
 
 def main():
     links,errors=discover()
