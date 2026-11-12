@@ -20,20 +20,22 @@ import unicodedata
 from urllib.parse import urlencode, urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
+from io import BytesIO
+from pypdf import PdfReader
 
 ROOT=Path(__file__).resolve().parent
 OUTPUT=ROOT/'data'/'concursos.json'
 BRT=timezone(timedelta(hours=-3))
 TODAY=datetime.now(BRT).date()
 MIN_SALARY=12000
-USER_AGENT='RadarConcursosSP/4.0 (public-edital-monitor; GitHub Actions)'
+USER_AGENT='Mozilla/5.0 (compatible; RadarConcursosSP/5.0; public-edital-monitor)'
 DIAG=Counter()
 DIAG_LOCK=Lock()
 def rejected(reason):
     with DIAG_LOCK: DIAG[reason] += 1
     return None
 SESSION=requests.Session()
-SESSION.headers.update({'User-Agent':USER_AGENT,'Accept-Language':'pt-BR,pt;q=0.9'})
+SESSION.headers.update({'User-Agent':USER_AGENT,'Accept-Language':'pt-BR,pt;q=0.9','Accept':'text/html,application/pdf;q=0.9,*/*;q=0.8'})
 TRUSTED_DOMAINS=(
     'vunesp.com.br','concursosfcc.com.br','conhecimento.fgv.br',
     'cebraspe.org.br','institutoaocp.org.br','ibfc.org.br',
@@ -126,15 +128,23 @@ def trusted(url):
     return any(h==d or h.endswith('.'+d) for d in TRUSTED_DOMAINS)
 
 def fetch(url):
+    """Fetch HTML or PDF from allow-listed domains, preserving type for parsing."""
     if not trusted(url): raise ValueError('URL não é de fonte permitida')
-    r=SESSION.get(url,timeout=16,allow_redirects=True)
+    r=SESSION.get(url,timeout=18,allow_redirects=True)
     r.raise_for_status()
     if not trusted(r.url): raise ValueError('Redirecionamento externo não permitido')
-    if len(r.content)>3_000_000:raise ValueError('Página acima do limite')
-    if 'pdf' in r.headers.get('content-type','').lower():
-        # PDF é fornecido como link, não tentamos tratá-lo como HTML.
-        return None,r.url
-    return r.text,r.url
+    if len(r.content)>8_000_000:raise ValueError('Documento acima do limite')
+    kind=r.headers.get('content-type','').lower()
+    if 'pdf' in kind or r.content[:4]==b'%PDF':
+        try:
+            pdf=PdfReader(BytesIO(r.content),strict=False)
+            pages=[]
+            for page in pdf.pages[:25]:
+                pages.append((page.extract_text() or '')[:12000])
+            return ' '.join(pages)[:60000],r.url,'pdf'
+        except Exception as exc:
+            raise ValueError('Falha ao ler PDF: '+type(exc).__name__)
+    return r.text,r.url,'html'
 
 def source_links(page,base):
     soup=BeautifulSoup(page,'html.parser')
@@ -153,8 +163,8 @@ def discover():
     pool=[]; errors=[]
     for name,url in DIRECT_SOURCES:
         try:
-            raw,final=fetch(url)
-            if raw:
+            raw,final,kind=fetch(url)
+            if raw and kind=='html':
                 pool+=source_links(raw,final)
                 # Algumas fontes têm a página do certame como destino direto.
                 if VUNESP_DETAIL.match(urlparse(final).path):pool.append(final)
@@ -273,53 +283,69 @@ def selection_context(title,body):
         return False
     return True
 
-def review_page(url):
-    raw,final=fetch(url)
-    if not raw:return rejected("pagina_sem_html")
-    soup=BeautifulSoup(raw,'html.parser')
+def parse_text_page(html,url):
+    soup=BeautifulSoup(html,'html.parser')
+    edital,registration=open_links(soup,url)
+    # Link labels often reveal official opening notice; examine at most 2 such documents.
     for tag in soup(['script','style','nav','footer','header','noscript']):tag.decompose()
     title_tag=soup.find('h1') or soup.find('h2') or soup.find('title')
     title=title_tag.get_text(' ',strip=True)[:220] if title_tag else ''
-    title=title or urlparse(final).path.strip('/')
-    text=soup.get_text(' ',strip=True)
-    text=re.sub(r'\s+',' ',text)[:20000]
-    if not selection_context(title,text):return rejected("sem_contexto_de_concurso_ou_resultado")
+    title=title or urlparse(url).path.strip('/')
+    text=re.sub(r'\s+',' ',soup.get_text(' ',strip=True))[:25000]
+    return title,text,edital,registration
+
+def review_page(url):
+    raw,final,kind=fetch(url)
+    if not raw:return rejected('pagina_sem_conteudo')
+    if kind=='pdf':
+        title=urlparse(final).path.rsplit('/',1)[-1]
+        text=raw
+        edital,registration=final,None
+    else:
+        title,text,edital,registration=parse_text_page(raw,final)
+    # Entire article titles about outcomes or academic admissions are excluded outright.
+    if not selection_context(title,text):return rejected('sem_contexto_de_concurso_ou_resultado')
     group=career(title,text)
-    if not group:return rejected("cargo_nao_identificado")
-    # Não aceita resultado ou prazo expirado como inscrição.
-    ntitle=norm(title)
-    if any(words_has(ntitle,k) for k in DISQUALIFY_TITLE):return rejected("pagina_de_resultado_ou_curso")
-    end=registration_deadline(text)
-    if not end:return rejected("prazo_de_inscricao_nao_identificado")
-    loc,loc_type=location(title,text)
-    salary,why=salary_for_job(title,text)
-    edital,registration=open_links(soup,final)
-    if 'vunesp.com.br' in urlparse(final).netloc:registration=registration or final
-    # Critério conservador: órgão municipal localizado + remuneração exata.
-    # Citação geográfica e salários gerais/ambíguos ficam apenas em revisão.
+    if not group:return rejected('cargo_nao_identificado')
+    # On a real public call, the opening edital usually contains better facts than the landing page.
+    # Do not treat a salary range across multiple positions as proof of the target position salary.
+    doc_text=''
+    if edital and edital!=final and trusted(edital):
+        try:
+            extracted,_,doc_kind=fetch(edital)
+            if doc_kind=='pdf' and extracted:doc_text=extracted[:45000]
+        except Exception:rejected('edital_pdf_inacessivel')
+    combined=(text+' '+doc_text)[:65000]
+    if doc_text and not group:group=career(title,combined)
+    deadline=registration_deadline(combined)
+    if not deadline:return rejected('prazo_de_inscricao_nao_identificado')
+    loc,loc_type=location(title,combined)
+    if loc_type=='indefinida':return rejected('lotacao_sem_cidade_permitida')
+    if any(words_has(norm(title),city) for city in OUTSIDE) and loc_type not in ('municipal','capital'):
+        return rejected('cidade_fora_da_regiao')
+    salary,why=salary_for_job(title,combined)
+    if salary is not None and salary<MIN_SALARY:return rejected('salario_inferior_ao_piso')
+    if 'vunesp.com.br' in urlparse(final).netloc: registration=registration or final
+    # For strict highlights, landing page and edital must describe one named job and
+    # salary; a page for an entire multi-job selection stays under review.
+    multi_cargo=any(x in norm(combined[:1000]) for x in ('diversos cargos','faixa salarial','salarios entre','varios cargos'))
     confirmed=(loc_type in ('municipal','capital') and salary is not None
-               and salary>=MIN_SALARY and bool(registration))
-    if salary is not None and salary<MIN_SALARY:return rejected("salario_inferior_ao_piso")
-    status='apto_para_conferencia' if confirmed else 'revisao'
-    reason=[]
-    if not confirmed:
-        if loc_type not in ('municipal','capital'):reason.append('Cidade de exercício não comprovada')
-        if salary is None:reason.append(why or 'Salário a conferir')
-        if not registration:reason.append('Link de inscrição não localizado')
-    # Descarta candidaturas sem sequer localidade plausível, inclusive concursos de outro estado.
-    nt=norm(title+' '+text[:900])
-    if loc_type=='indefinida':return rejected("lotacao_sem_cidade_permitida")
-    if any(words_has(norm(title),c) for c in OUTSIDE) and loc_type not in ('municipal','capital'):return rejected("cidade_fora_da_regiao")
-    # Link oficial e título, não texto de manchete de terceiros.
+               and salary>=MIN_SALARY and bool(registration) and not multi_cargo)
+    issues=[]
+    if loc_type not in ('municipal','capital'):issues.append('Cidade de exercício não comprovada')
+    if salary is None:issues.append(why or 'Salário não comprovado por cargo')
+    if not registration:issues.append('Não foi encontrado link específico de inscrição')
+    if multi_cargo:issues.append('Edital de múltiplos cargos: verificar remuneração individual')
     item={
-        'id':hashlib.sha256(final.encode()).hexdigest()[:16],
-        'title':title,'organizer':urlparse(final).hostname or '',
-        'area':group,'salary':salary,'deadline':end.isoformat(),
-        'location':loc,'location_status':'capital_abc' if loc_type in ('municipal','capital') else 'uncertain',
-        'status':status, 'reason':'; '.join(reason),
-        'summary':'Verifique o edital original para requisitos, inscrição e lotação.',
-        'source_url':final,'edital_url':edital,'registration_url':registration,
-        'published':TODAY.isoformat()
+      'id':hashlib.sha256(final.encode()).hexdigest()[:16],
+      'title':title,'organizer':urlparse(final).hostname or '',
+      'area':group,'salary':salary,'deadline':deadline.isoformat(),
+      'location':loc,'location_status':'capital_abc' if loc_type in ('municipal','capital') else 'uncertain',
+      'status':'apto_para_conferencia' if confirmed else 'revisao',
+      'reason':'; '.join(issues),
+      'summary':'Conferir no edital original cargo, formação, lotação e vigência das inscrições.',
+      'source_url':final,'edital_url':edital,'registration_url':registration,
+      'published':TODAY.isoformat()
     }
     return item
 
@@ -345,6 +371,7 @@ def main():
                  'revisao':len(review),'descartados':discarded,'falhas':len(errors)},
         'source_errors':errors[:15],
         'diagnostico_descartes':dict(DIAG),
+        'limitations':['Automação de triagem; a aprovação depende de leitura do edital.', 'Portais podem bloquear acessos e não expor PDFs de modo automatizado.'],
     }
     OUTPUT.parent.mkdir(parents=True,exist_ok=True)
     OUTPUT.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
