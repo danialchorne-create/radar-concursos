@@ -27,7 +27,7 @@ ROOT=Path(__file__).resolve().parent
 OUTPUT=ROOT/'data'/'concursos.json'
 BRT=timezone(timedelta(hours=-3))
 TODAY=datetime.now(BRT).date()
-MIN_SALARY=12000
+MIN_SALARY=15000
 USER_AGENT='Mozilla/5.0 (compatible; RadarConcursosSP/5.0; public-edital-monitor)'
 DIAG=Counter()
 DIAG_LOCK=Lock()
@@ -349,9 +349,130 @@ def review_page(url):
     }
     return item
 
+
+# Pesquisa complementar em notícias e agregadores. Nunca promove notícia a
+# inscrição confirmada: a aba "Para conferir" exige conferência do edital.
+NEWS_QUERIES = [
+  '"concurso público" "São Paulo" "médico" inscrições',
+  '"concurso público" "São Paulo" "procurador" inscrições',
+  '"concurso público" "São Paulo" "auditor" inscrições',
+  '"concurso público" "São Paulo" "economista" inscrições',
+  '"concurso público" "São Paulo" "analista" inscrições',
+  '"concurso público" "Guarulhos" inscrições',
+  '"concurso público" "Osasco" inscrições',
+  '"concurso público" "Barueri" inscrições',
+  '"concurso público" "Taboão da Serra" inscrições',
+  '"concurso público" "Santo André" inscrições',
+  '"concurso público" "São Bernardo do Campo" inscrições',
+  '"concurso público" "São Caetano do Sul" inscrições',
+  '"concurso público" "Diadema" inscrições',
+  '"concurso público" "Mauá" inscrições',
+  '"concurso público" "TRF3" inscrições',
+  '"concurso público" "TJSP" inscrições',
+  '"concurso público" "TCE SP" inscrições',
+  'site:pciconcursos.com.br "São Paulo" "médico" concurso',
+  'site:pciconcursos.com.br "São Paulo" "procurador" concurso',
+  'site:pciconcursos.com.br "São Paulo" "auditor" concurso',
+  'site:concursosfcc.com.br "São Paulo" inscrições concurso',
+  'site:vunesp.com.br "São Paulo" inscrições concurso',
+  'site:conhecimento.fgv.br/concursos "São Paulo" inscrições',
+]
+NEWS_BLOCK = (
+ 'resultado','resultados','gabarito','gabaritos','notas','nota de corte',
+ 'classificacao','homologacao','convocacao','nomeacao','provas aplicadas',
+ 'local de prova','data da prova','lista de aprovados','concurso encerrado',
+ 'inscricoes encerradas','mestrado','doutorado','residencia medica',
+ 'residencia multiprofissional','vestibular','bolsa de estudos',
+ 'curso gratuito','processo seletivo de alunos','pos-graduacao',
+ 'concurso de redação','concurso cultural'
+)
+# Estados que não podem ser confundidos com municípios da Grande São Paulo.
+NEWS_OUTSIDE = ('acre','amazonas','rondonia','roraima','amapa','tocantins',
+ 'paraiba','pernambuco','ceara','alagoas','sergipe','bahia','piaui',
+ 'maranhao','mato grosso','goias','parana','santa catarina',
+ 'rio grande do sul','minas gerais','rio de janeiro','espirito santo',
+ 'distrito federal','rio branco','manaus','recife','fortaleza',
+ 'curitiba','belo horizonte','porto alegre','goiania','brasilia')
+NEWS_CITIES = tuple(x for x in CITIES if x != 'sao paulo')
+PUBLIC_JOBS = ('concurso publico','concurso para','concurso da','concurso do',
+ 'edital de concurso','concurso abre','concurso oferece','concurso com')
+OPEN_WORDS = ('inscricoes','inscricao','edital','vagas','prazo','selecao')
+NEWS_CAREERS = (
+ 'medico','medica','cirurgiao','clinico','procurador','advogado',
+ 'auditor','economista','analista','defensor','promotor','juiz',
+ 'magistratura','perito','fiscal','controlador','tributario',
+ 'nivel superior','ensino superior','especialista','gestao publica'
+)
+
+def news_lead(title, snippet, url, pubdate):
+    title_n=norm(title)
+    t=norm(title+' '+snippet)
+    if any(x in title_n for x in NEWS_BLOCK):return None
+    if any(words_has(t,x) for x in NEWS_OUTSIDE):return None
+    if not any(x in t for x in PUBLIC_JOBS):return None
+    if not any(x in t for x in OPEN_WORDS):return None
+    if not any(words_has(t,x) for x in NEWS_CAREERS):return None
+    # Só aceitar município explicitamente citado, não "Estado de SP".
+    matches=[CITIES[c] for c in NEWS_CITIES if words_has(t,c)]
+    capital=any(x in t for x in CAPITAL_MARKERS) or 'sao paulo (sp)' in t or 'cidade de sao paulo' in t
+    if not matches and not capital:
+        return None
+    area=career(title,snippet)
+    if not area:return None
+    # Um salário máximo de notícia nunca prova a remuneração do cargo.
+    salary, why=salary_for_job(title, title+' '+snippet)
+    if salary is not None and salary<MIN_SALARY:return None
+    if pubdate:
+        try:
+            d=parsedate_to_datetime(pubdate)
+            if d.tzinfo is None:d=d.replace(tzinfo=timezone.utc)
+            if (datetime.now(timezone.utc)-d.astimezone(timezone.utc)).days>45:return None
+        except (ValueError,TypeError,OverflowError):pass
+    if not url.startswith('https://'):return None
+    loc=matches[0] if len(set(matches))==1 else ('São Paulo (capital)' if capital and not matches else 'Município a confirmar')
+    return {
+      'id':hashlib.sha256(('news:'+url).encode()).hexdigest()[:16],
+      'title':title[:210],'organizer':urlparse(url).hostname or 'Notícia',
+      'area':area,'salary':None,'deadline':None,
+      'location':loc,'location_status':'uncertain','status':'revisao',
+      'reason':'Notícia/portal de divulgação: conferir edital, inscrições, cargo, salário acima de R$ 15 mil e lotação. '
+               + ('Valor citado na notícia não comprova salário do cargo.' if salary else 'Salário ainda não comprovado.'),
+      'summary':snippet[:350],'source_url':url,
+      'edital_url':None,'registration_url':None,'published':TODAY.isoformat()
+    }
+
+def discover_news():
+    leads=[];errors=[];seen=set()
+    # Google Notícias RSS é uma fonte adicional, não o único mecanismo.
+    for query in NEWS_QUERIES:
+        try:
+            rss='https://news.google.com/rss/search?'+urlencode({
+                'q':query+' when:30d','hl':'pt-BR','gl':'BR','ceid':'BR:pt-419'})
+            r=SESSION.get(rss,timeout=14)
+            r.raise_for_status()
+            soup=BeautifulSoup(r.content,'xml')
+            for entry in soup.find_all('item')[:35]:
+                title=entry.find('title')
+                link=entry.find('link')
+                desc=entry.find('description')
+                date_tag=entry.find('pubDate')
+                if not title or not link:continue
+                u=link.get_text(strip=True)
+                if u in seen:continue
+                seen.add(u)
+                snippet=BeautifulSoup(desc.get_text(' ',strip=True) if desc else '', 'html.parser').get_text(' ',strip=True)
+                lead=news_lead(title.get_text(' ',strip=True),snippet,u,
+                               date_tag.get_text(strip=True) if date_tag else None)
+                if lead:leads.append(lead)
+        except Exception as exc:
+            errors.append('Notícias: '+type(exc).__name__)
+    return leads,errors
+
 def main():
     links,errors=discover()
     approved=[];review=[];discarded=0
+    news,news_errors=discover_news()
+    errors.extend(news_errors)
     def get_one(url):
         try:return review_page(url),None
         except Exception as ex:return None,type(ex).__name__
@@ -360,14 +481,20 @@ def main():
             if err:errors.append(err)
             if not result:discarded+=1;continue
             (approved if result['status']=='apto_para_conferencia' else review).append(result)
+    # Notícias ficam somente em revisão, nunca em destaque.
+    existing={(norm(x['title']),norm(x['location'])) for x in approved+review}
+    for lead in news:
+        key=(norm(lead['title']),norm(lead['location']))
+        if key not in existing:
+            review.append(lead);existing.add(key)
     approved.sort(key=lambda x:(x['deadline'],x['title']))
-    review.sort(key=lambda x:(x['deadline'],x['title']))
+    review.sort(key=lambda x:(x['deadline'] or '9999',x['title']))
     data={
         'updated_at':datetime.now(timezone.utc).isoformat(),
         'note':'Fontes oficiais e bancas. As vagas em destaque passaram por validação automatizada; confira edital, cargo, salário, lotação e disponibilidade antes de se inscrever. A coleta não é exaustiva.',
         'items':approved,
         'review':review,
-        'stats':{'links_oficiais_analisados':len(links),'destaques':len(approved),
+        'stats':{'links_oficiais_analisados':len(links),'noticias_triadas':len(news),'destaques':len(approved),
                  'revisao':len(review),'descartados':discarded,'falhas':len(errors)},
         'source_errors':errors[:15],
         'diagnostico_descartes':dict(DIAG),
@@ -375,6 +502,7 @@ def main():
     }
     OUTPUT.parent.mkdir(parents=True,exist_ok=True)
     OUTPUT.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+    print('Notícias candidatas para revisão:',len(news))
     print('Páginas oficiais:',len(links),'destaques:',len(approved),'revisão:',len(review),
           'descartadas:',discarded,'falhas:',len(errors))
     print('Motivos dos descartes:', json.dumps(dict(DIAG), ensure_ascii=False))
