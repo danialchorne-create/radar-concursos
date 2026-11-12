@@ -1,38 +1,78 @@
 {
-  "updated_at": "2026-11-12T03:56:55.924Z",
-  "note": "Resultado inicial revisado com fonte oficial. A rotina automática atualiza este arquivo; nenhuma notícia de agregador é considerada inscrição confirmada. Lotação e requisitos devem ser confirmados no edital.",
+  "updated_at": "2026-11-12T10:58:04.026769+00:00",
+  "note": "Fontes oficiais e bancas. As vagas em destaque passaram por validação automatizada; confira edital, cargo, salário, lotação e disponibilidade antes de se inscrever. A coleta não é exaustiva.",
   "items": [],
   "review": [
     {
       "id": "trf3-oficial-justica-2026-sp",
-      "title": "TRF3 — Oficial de Justiça Avaliador Federal (classificação SP)",
-      "organizer": "TRF3 / Vunesp",
+      "title": "TRF3 — Analista Judiciário, Oficial de Justiça Avaliador Federal (classificação SP)",
+      "organizer": "TRF3 / Fundação Vunesp",
       "area": "Direito",
       "salary": 20013.11,
       "deadline": "2026-11-23",
-      "location": "Seção Judiciária de São Paulo — cidade de lotação não garantida",
+      "location": "Seção Judiciária de São Paulo — lotação exata não garantida",
       "location_status": "uncertain",
       "status": "revisao",
-      "reason": "Cadastro de reserva. A classificação para a Seção Judiciária de SP não garante lotação na capital/ABC. Edital e inscrição oficial devem ser conferidos.",
-      "summary": "Graduação em Direito; R$ 20.013,11 de remuneração inicial bruta. Inscrições até 23/11/2026. Fonte oficial TRF3 e banca Vunesp.",
+      "reason": "Cargo com cadastro de reserva. Unidade de classificação SP não garante lotação na capital ou ABC. Conferir requisitos, edital e lotação antes da inscrição. Informação oficial consultada em 12/11/2026.",
+      "summary": "Graduação em Direito. Inscrições de 04/11/2026 até 23/11/2026; salário inicial bruto R$ 20.013,11. Cadastro de reserva em SP.",
       "source_url": "https://web.trf3.jus.br/noticias-sjsp/Noticiar/ExibirNoticia/2450-trf3-divulga-edital-de-concurso-para-servidores",
       "edital_url": "https://www.vunesp.com.br/TRFT2601",
       "registration_url": "https://www.vunesp.com.br/TRFT2601",
       "published": "2026-11-12"
+    },
+    {
+      "id": "981fd11870546c10",
+      "title": "Fundação Santo André - SP abre concurso para Analista Administrativo Acadêmico - PCI Concursos",
+      "organizer": "news.google.com",
+      "area": "Geral nível superior",
+      "salary": null,
+      "deadline": null,
+      "location": "Santo André",
+      "location_status": "uncertain",
+      "status": "revisao",
+      "reason": "Notícia/portal de divulgação: conferir edital, inscrições, cargo, salário acima de R$ 15 mil e lotação. Valor salarial divulgado na notícia ainda exige conferência no edital.",
+      "summary": "Fundação Santo André - SP abre concurso para Analista Administrativo Acadêmico PCI Concursos",
+      "source_url": "https://news.google.com/rss/articles/CBMiuAFBVV95cUxPLVRJRDRhaVV0MWNjWUFoVEhfZ0FNN1g0YzBaRm9pM2VROFJMOUdPRFRQYUFnOHBfVnluSzVxZDVXZWJlVkVhaXJTcVN3UzZRYmVSN0c5VEQxRW9VMUUwb1k3SDJ0WUZDX2Z2alhKWWdzbG1CaEpQQkVka3cwUzlGOE1EelFlUjFHSTNlQ0RzR05HU00zLVBxV08zX1k4N1hWSzNZdFdZS0FWcm4zZG45UUh0eXp3N09v?oc=5",
+      "edital_url": null,
+      "registration_url": null,
+      "published": "2026-11-12"
     }
   ],
   "stats": {
-    "links_oficiais_analisados": 0,
-    "noticias_triadas": 0,
+    "links_oficiais_analisados": 240,
+    "noticias_triadas": 1,
     "destaques": 0,
-    "revisao": 1,
-    "descartados": 0,
-    "falhas": 0
+    "revisao": 2,
+    "descartados": 240,
+    "falhas": 7
   },
-  "source_errors": [],
-  "diagnostico_descartes": {},
+  "source_errors": [
+    "Vunesp - Direito: HTTPError",
+    "Vunesp - Medicina: HTTPError",
+    "Vunesp - Auditoria: HTTPError",
+    "Vunesp - São Paulo: HTTPError",
+    "Vunesp - Guarulhos: HTTPError",
+    "Vunesp - Osasco: HTTPError",
+    "FCC - inscrições abertas: SSLError"
+  ],
+  "news_diagnostic": {
+    "rss_items": 361,
+    "sample_titles": [
+      "USP abre concurso público para médico-veterinário na área de animais de experimentação - - CRMV-RJ",
+      "HCFMRP - USP abre concurso público para médico na área de alergia e imunologia - PCI Concursos",
+      "Prefeitura de Leme SP publica edital nº 02/2026 de concurso com 29 vagas - Qconcursos Folha Dirigida",
+      "Concurso da PM de SP: inscrição para 2 mil vagas vai até 22 de dezembro; pedidos de isenção ou redução de taxa devem ser feitos at",
+      "Concurso HCRP-USP de Ribeirão Preto-SP abre concurso para três cargos - Ache Concursos",
+      "Concurso INSS: 10 mil + 2 mil vagas solicitadas. Acompanhe! - Blog Gran Cursos Online"
+    ]
+  },
+  "diagnostico_descartes": {
+    "prazo_de_inscricao_nao_identificado": 27,
+    "sem_contexto_de_concurso_ou_resultado": 80,
+    "cargo_nao_identificado": 133
+  },
   "limitations": [
-    "Resultado inicial verificado em fontes públicas; a pesquisa automática pode não cobrir todos os editais.",
-    "A lotação do cargo não está garantida na capital nem no ABC."
+    "Automação de triagem; a aprovação depende de leitura do edital.",
+    "Portais podem bloquear acessos e não expor PDFs de modo automatizado."
   ]
 }
