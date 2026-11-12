@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-12T02:28:57.188387+00:00",
+  "updated_at": "2026-11-12T02:42:33.196240+00:00",
   "note": "Fontes oficiais e bancas. As vagas em destaque passaram por validação automatizada; confira edital, cargo, salário, lotação e disponibilidade antes de se inscrever. A coleta não é exaustiva.",
   "items": [],
   "review": [],
@@ -17,5 +17,10 @@
     "Vunesp - São Paulo: HTTPError",
     "Vunesp - Guarulhos: HTTPError",
     "Vunesp - Osasco: HTTPError"
-  ]
+  ],
+  "diagnostico_descartes": {
+    "sem_contexto_de_concurso_ou_resultado": 7,
+    "prazo_de_inscricao_nao_identificado": 31,
+    "cargo_nao_identificado": 22
+  }
 }
