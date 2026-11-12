@@ -78,7 +78,7 @@ CAREERS={
             'analista de financas','economista','analista tributario',
             'fiscal de tributos','analista de planejamento','analista em planejamento'),
  'Geral nível superior':('analista administrativo','analista de gestao','especialista em politicas',
-                           'cargo de nivel superior','nivel superior em qualquer area')
+                           'cargo de nivel superior','nivel superior em qualquer area','professor universitario','docente universitario')
 }
 # Fontes diretas: páginas oficiais de concursos ou mecanismos internos da banca.
 DIRECT_SOURCES=[
@@ -327,7 +327,7 @@ def review_page(url):
     if any(words_has(norm(title),city) for city in OUTSIDE) and loc_type not in ('municipal','capital'):
         return rejected('cidade_fora_da_regiao')
     salary,why=salary_for_job(title,combined)
-    if salary is not None and salary<MIN_SALARY:return rejected('salario_inferior_ao_piso')
+    if salary is not None and salary<=MIN_SALARY:return rejected('salario_inferior_ao_piso')
     if 'vunesp.com.br' in urlparse(final).netloc: registration=registration or final
     if 'pciconcursos.com.br' in urlparse(final).netloc:
         registration=None # Portal agregador não é link de inscrição oficial
@@ -335,7 +335,7 @@ def review_page(url):
     # salary; a page for an entire multi-job selection stays under review.
     multi_cargo=any(x in norm(combined[:1000]) for x in ('diversos cargos','faixa salarial','salarios entre','varios cargos'))
     confirmed=(loc_type in ('municipal','capital') and 'pciconcursos.com.br' not in urlparse(final).netloc and salary is not None
-               and salary>=MIN_SALARY and bool(registration) and not multi_cargo)
+               and salary>MIN_SALARY and bool(registration) and not multi_cargo)
     issues=[]
     if loc_type not in ('municipal','capital'):issues.append('Cidade de exercício não comprovada')
     if salary is None:issues.append(why or 'Salário não comprovado por cargo')
@@ -406,7 +406,7 @@ NEWS_CAREERS = (
  'medico','medica','cirurgiao','clinico','procurador','advogado',
  'auditor','economista','analista','defensor','promotor','juiz',
  'magistratura','perito','fiscal','controlador','tributario',
- 'nivel superior','ensino superior','especialista','gestao publica'
+ 'nivel superior','ensino superior','especialista','gestao publica','professor universitario'
 )
 
 def news_lead(title, snippet, url, pubdate):
