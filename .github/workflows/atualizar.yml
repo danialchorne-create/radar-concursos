@@ -1,5 +1,11 @@
 name: Atualizar concursos
 on:
+  push:
+    paths:
+      - 'update.py'
+      - 'index.html'
+      - 'requirements.txt'
+      - '.github/workflows/atualizar.yml'
   schedule:
     - cron: '0 10,22 * * *' # 07h e 19h em São Paulo
   workflow_dispatch:
@@ -8,7 +14,7 @@ permissions:
 jobs:
   busca:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - name: Baixar arquivos do projeto
         uses: actions/checkout@v4
