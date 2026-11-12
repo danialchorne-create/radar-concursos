@@ -1,14 +1,15 @@
 {
-  "updated_at": "2026-11-12T03:34:58.719903+00:00",
+  "updated_at": "2026-11-12T03:52:46.478526+00:00",
   "note": "Fontes oficiais e bancas. As vagas em destaque passaram por validação automatizada; confira edital, cargo, salário, lotação e disponibilidade antes de se inscrever. A coleta não é exaustiva.",
   "items": [],
   "review": [],
   "stats": {
-    "links_oficiais_analisados": 60,
+    "links_oficiais_analisados": 240,
+    "noticias_triadas": 0,
     "destaques": 0,
     "revisao": 0,
-    "descartados": 60,
-    "falhas": 6
+    "descartados": 240,
+    "falhas": 7
   },
   "source_errors": [
     "Vunesp - Direito: HTTPError",
@@ -16,12 +17,13 @@
     "Vunesp - Auditoria: HTTPError",
     "Vunesp - São Paulo: HTTPError",
     "Vunesp - Guarulhos: HTTPError",
-    "Vunesp - Osasco: HTTPError"
+    "Vunesp - Osasco: HTTPError",
+    "FCC - inscrições abertas: SSLError"
   ],
   "diagnostico_descartes": {
-    "sem_contexto_de_concurso_ou_resultado": 7,
-    "cargo_nao_identificado": 22,
-    "prazo_de_inscricao_nao_identificado": 31
+    "prazo_de_inscricao_nao_identificado": 27,
+    "sem_contexto_de_concurso_ou_resultado": 80,
+    "cargo_nao_identificado": 133
   },
   "limitations": [
     "Automação de triagem; a aprovação depende de leitura do edital.",
