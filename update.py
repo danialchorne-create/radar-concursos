@@ -37,7 +37,7 @@ def rejected(reason):
 SESSION=requests.Session()
 SESSION.headers.update({'User-Agent':USER_AGENT,'Accept-Language':'pt-BR,pt;q=0.9','Accept':'text/html,application/pdf;q=0.9,*/*;q=0.8'})
 TRUSTED_DOMAINS=(
-    'vunesp.com.br','concursosfcc.com.br','conhecimento.fgv.br',
+    'vunesp.com.br','concursosfcc.com.br','fcc.org.br','pciconcursos.com.br','conhecimento.fgv.br',
     'cebraspe.org.br','institutoaocp.org.br','ibfc.org.br',
     'nossorumo.org.br','gov.br','sp.gov.br','jus.br','leg.br',
     'usp.br','unesp.br','unicamp.br','fundacaofat.org.br',
@@ -88,7 +88,9 @@ DIRECT_SOURCES=[
  ('Vunesp - São Paulo','https://www.vunesp.com.br/?b=SAO%20PAULO'),
  ('Vunesp - Guarulhos','https://www.vunesp.com.br/?b=GUARULHOS'),
  ('Vunesp - Osasco','https://www.vunesp.com.br/?b=OSASCO'),
- ('FCC - inscrições abertas','https://www.concursosfcc.com.br/'),
+ ('FCC - inscrições abertas','https://www1.concursosfcc.com.br/'),
+ ('PCI - concursos SP','https://www.pciconcursos.com.br/pesquisa/concursos-estado-de-sp'),
+ ('PCI - capital','https://www.pciconcursos.com.br/concursos/sp/sao-paulo'),
  ('FGV - concursos','https://conhecimento.fgv.br/concursos'),
 ]
 # Motor de descoberta é complementar: os links só são aproveitados DEPOIS de
@@ -155,7 +157,8 @@ def source_links(page,base):
         path=urlparse(href).path
         label=a.get_text(' ',strip=True)
         if (VUNESP_DETAIL.match(path) or ('concurso' in norm(href) and len(label)>5)
-            or ('edital' in norm(href) and len(label)>5)):
+            or ('edital' in norm(href) and len(label)>5) or
+            ('pciconcursos.com.br' in urlparse(href).netloc and 'noticias/' in href and len(label)>10)):
             result.append(href)
     return result
 
@@ -326,10 +329,12 @@ def review_page(url):
     salary,why=salary_for_job(title,combined)
     if salary is not None and salary<MIN_SALARY:return rejected('salario_inferior_ao_piso')
     if 'vunesp.com.br' in urlparse(final).netloc: registration=registration or final
+    if 'pciconcursos.com.br' in urlparse(final).netloc:
+        registration=None # Portal agregador não é link de inscrição oficial
     # For strict highlights, landing page and edital must describe one named job and
     # salary; a page for an entire multi-job selection stays under review.
     multi_cargo=any(x in norm(combined[:1000]) for x in ('diversos cargos','faixa salarial','salarios entre','varios cargos'))
-    confirmed=(loc_type in ('municipal','capital') and salary is not None
+    confirmed=(loc_type in ('municipal','capital') and 'pciconcursos.com.br' not in urlparse(final).netloc and salary is not None
                and salary>=MIN_SALARY and bool(registration) and not multi_cargo)
     issues=[]
     if loc_type not in ('municipal','capital'):issues.append('Cidade de exercício não comprovada')
