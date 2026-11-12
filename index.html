@@ -8,15 +8,15 @@
 </style>
 </head>
 <body>
-<header><div class="eyebrow">Radar de oportunidades profissionais</div><h1>Concursos públicos em São Paulo e região</h1><p>Para profissionais de Direito, Medicina, Economia e carreiras de nível superior. Busca em fontes oficiais e bancas, com prioridade para remuneração inicial a partir de R$ 12 mil e atuação próxima à capital.</p></header>
+<header><div class="eyebrow">Radar de oportunidades profissionais</div><h1>Concursos públicos em São Paulo e região</h1><p>Para profissionais de Direito, Medicina, Economia e carreiras de nível superior. Busca em fontes oficiais, bancas e notícias (incluindo buscas em PCI), com prioridade para remuneração inicial a partir de R$ 15 mil e atuação próxima à capital.</p></header>
 <div class="wrap">
-<div class="notice"><strong>Como usar este radar:</strong> a aba “Em destaque” exige evidências automatizadas de período de inscrição, salário e cidade. Mesmo assim, <strong>confirme todos os requisitos no edital e a unidade de lotação antes de pagar a inscrição</strong>. A aba “Para conferir” reúne seleções potencialmente relevantes com informações incompletas. Não exibimos notícias genéricas de provas, notas e gabaritos.</div>
+<div class="notice"><strong>Como usar este radar:</strong> a aba “Em destaque” exige evidências automatizadas de período de inscrição, salário e cidade. Mesmo assim, <strong>confirme todos os requisitos no edital e a unidade de lotação antes de pagar a inscrição</strong>. A aba “Para conferir” reúne notícias e seleções potencialmente relevantes com informações incompletas; não são inscrições confirmadas. Não exibimos notícias genéricas de provas, notas e gabaritos.</div>
 <div class="stats"><div class="stat"><strong id="numapproved">–</strong><span>Em destaque</span></div><div class="stat"><strong id="numreview">–</strong><span>Para conferir</span></div><div class="stat"><strong id="numchecked">–</strong><span>Páginas examinadas</span></div></div>
 <div id="error"></div>
 <div class="box"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2 style="margin:0">Encontre uma oportunidade</h2><button id="refresh" class="tab">↻ Atualizar dados</button></div><p class="small" id="updated">Carregando atualização...</p><div class="filters"><div><label for="search">Buscar cargo ou órgão</label><input id="search" placeholder="Ex.: médico, procurador, auditor" autocomplete="off"></div><div><label for="area">Área</label><select id="area"><option value="all">Todas</option><option>Medicina</option><option>Direito</option><option>Economia e Finanças</option><option>Geral nível superior</option></select></div><div><label for="order">Ordenar por</label><select id="order"><option value="deadline">Prazo mais próximo</option><option value="salary">Maior salário</option><option value="name">Nome do cargo</option></select></div></div></div>
 <div class="tabs"><button class="tab active" id="tabapproved" data-tab="approved">Em destaque (0)</button><button class="tab" id="tabreview" data-tab="review">Para conferir (0)</button></div>
 <p class="small" id="tabhint"></p><div id="cards" class="cards"></div>
-<footer><strong>Importante:</strong> classificação automática não é homologação de elegibilidade. “Cidade citada” não comprova lotação. O radar não garante cobertura de todos os editais e não confirma que haverá vagas imediatas (algumas seleções são apenas cadastro de reserva). As buscas são programadas às 7h e 19h, quando o GitHub Actions estiver habilitado. Dados e links são fornecidos somente para conferência nas páginas oficiais.</footer>
+<footer><strong>Importante:</strong> A seção de notícias é para conferência e não comprova inscrições abertas. Classificação automática não é homologação de elegibilidade. “Cidade citada” não comprova lotação. O radar não garante cobertura de todos os editais e não confirma que haverá vagas imediatas (algumas seleções são apenas cadastro de reserva). As buscas são programadas às 7h e 19h, quando o GitHub Actions estiver habilitado. Dados e links são fornecidos somente para conferência nas páginas oficiais.</footer>
 </div>
 <script>
 let approved=[], review=[], tab='approved';
@@ -29,7 +29,7 @@ function render(){
  $('tabapproved').textContent=`Em destaque (${approved.length})`;
  $('tabreview').textContent=`Para conferir (${review.length})`;
  for(const el of document.querySelectorAll('[data-tab]'))el.classList.toggle('active',el.dataset.tab===tab);
- $('tabhint').textContent=tab==='approved'?'Somente seleções que passaram pelos filtros automáticos mais exigentes. A confirmação final depende do edital.':'Resultados com informações incompletas. NÃO estão confirmados para inscrição nem para o salário desejado.';
+ $('tabhint').textContent=tab==='approved'?'Somente seleções que passaram pelos filtros automáticos mais exigentes. A confirmação final depende do edital.':'Notícias de concursos e seleções com informações incompletas. NÃO são inscrições confirmadas, nem comprovação de salário acima de R$ 15 mil ou lotação.';
  const text=$('search').value.toLocaleLowerCase('pt-BR').trim(), area=$('area').value;
  let data=(tab==='approved'?approved:review).filter(x=>(area==='all'||x.area===area) && (!text||[x.title,x.organizer,x.location].join(' ').toLocaleLowerCase('pt-BR').includes(text)));
  const sort=$('order').value;
