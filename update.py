@@ -1,329 +1,347 @@
 #!/usr/bin/env python3
-"""Radar de concursos: triagem automatizada de notícias públicas recentes.
+"""Radar de concursos: descoberta em bancas/órgãos e validação em páginas oficiais.
 
-Não certifica abertura/lotação. Data e salário são inferidos apenas quando explicitamente citados.
-Sem dependências externas; execução agendada pelo GitHub Actions.
+A lista 'abertos' é conservadora; 'revisao' NUNCA é apresentada como inscrição confirmada.
+Este script não substitui a leitura de edital e não garante cobertura exaustiva.
 """
+from __future__ import annotations
 import concurrent.futures
-import datetime as dt
+from datetime import datetime, date, timedelta, timezone
+from email.utils import parsedate_to_datetime
 import hashlib
-import html
 import json
 import os
 from pathlib import Path
 import re
-import urllib.parse
-import urllib.request
-import xml.etree.ElementTree as ET
-from email.utils import parsedate_to_datetime
+import time
+import unicodedata
+from urllib.parse import urlencode, urljoin, urlparse
+import requests
+from bs4 import BeautifulSoup
 
-BASE = Path(__file__).parent
-DATA = BASE / 'data' / 'concursos.json'
-TODAY = dt.datetime.now(dt.timezone(dt.timedelta(hours=-3))).date()
-# Consultas focadas em CARGOS PÚBLICOS, não seleções acadêmicas.
-QUERIES = [
-    'concurso público inscrições abertas procurador São Paulo remuneração',
-    'concurso público inscrições abertas auditor fiscal São Paulo salário',
-    'concurso público inscrições abertas médico São Paulo remuneração',
-    'concurso público inscrições abertas analista judiciário São Paulo salário',
-    'concurso público inscrições abertas oficial justiça São Paulo',
-    'concurso público inscrições abertas perito médico São Paulo',
-    'concurso público inscrições abertas economista São Paulo',
-    'concurso público inscrições abertas defensor público São Paulo',
-    'concurso público inscrições abertas auditor controle externo São Paulo',
-    'concurso público edital médico procurador Santo André',
-    'concurso público edital médico procurador São Bernardo do Campo',
-    'concurso público edital médico procurador São Caetano do Sul',
-    'concurso público edital médico procurador Mauá Diadema',
-    'concurso público inscrições abertas médico procurador Osasco',
-    'concurso público inscrições abertas auditor médico Taboão da Serra',
-    'concurso público inscrições abertas procurador médico Barueri',
-    'concurso público inscrições abertas procurador médico Guarulhos',
-    'site:prefeitura.sp.gov.br concurso público edital médico procurador',
-    'site:tjsp.jus.br concurso público servidor edital inscrições',
-    'site:trf3.jus.br concurso público servidor edital inscrições',
-    'site:tce.sp.gov.br concurso público auditor inscrições',
-    'site:osasco.sp.gov.br concurso público cargos inscrições',
-    'site:guarulhos.sp.gov.br concurso público cargos inscrições',
-    'site:barueri.sp.gov.br concurso público cargos inscrições',
-    'site:taboaodaserra.sp.gov.br concurso público cargos inscrições',
-]
-
-AREAS = {
-    'Medicina': ['médico', 'médica', 'medicina', 'cirurgião', 'perito médico', 'medico', 'saúde'],
-    'Direito': ['procurador', 'defensor', 'promotor', 'magistratura', 'juiz', 'advogado', 'oficial de justiça', 'analista judiciário', 'jurídic', 'juridic', 'delegado'],
-    'Economia e Finanças': ['auditor', 'economista', 'fiscal', 'finanças', 'tributári', 'contáb', 'controle externo'],
+ROOT=Path(__file__).resolve().parent
+OUTPUT=ROOT/'data'/'concursos.json'
+BRT=timezone(timedelta(hours=-3))
+TODAY=datetime.now(BRT).date()
+MIN_SALARY=12000
+USER_AGENT='RadarConcursosSP/4.0 (public-edital-monitor; GitHub Actions)'
+SESSION=requests.Session()
+SESSION.headers.update({'User-Agent':USER_AGENT,'Accept-Language':'pt-BR,pt;q=0.9'})
+TRUSTED_DOMAINS=(
+    'vunesp.com.br','concursosfcc.com.br','conhecimento.fgv.br',
+    'cebraspe.org.br','institutoaocp.org.br','ibfc.org.br',
+    'nossorumo.org.br','gov.br','sp.gov.br','jus.br','leg.br',
+    'usp.br','unesp.br','unicamp.br','fundacaofat.org.br',
+)
+# NÃO adicionamos o nome de um estado como evidência de cidade de trabalho.
+CITIES={
+ 'sao paulo':'São Paulo (capital)', 'santo andre':'Santo André',
+ 'sao bernardo do campo':'São Bernardo do Campo','sao caetano do sul':'São Caetano do Sul',
+ 'maua':'Mauá','diadema':'Diadema','ribeirao pires':'Ribeirão Pires',
+ 'rio grande da serra':'Rio Grande da Serra','osasco':'Osasco',
+ 'taboao da serra':'Taboão da Serra','barueri':'Barueri','guarulhos':'Guarulhos'
 }
-# Termos de localização devem ser checados com fronteiras de palavra.
-CITY_NAMES = [
-    'santo andré', 'santo andre', 'são bernardo do campo', 'sao bernardo do campo',
-    'são caetano do sul', 'sao caetano do sul', 'mauá', 'maua', 'diadema',
-    'ribeirão pires', 'ribeirao pires', 'rio grande da serra',
-    'osasco', 'taboão da serra', 'taboao da serra', 'barueri', 'guarulhos',
+CAPITAL_MARKERS=('prefeitura de sao paulo','municipio de sao paulo','cidade de sao paulo',
+                 'sao paulo capital','capital paulista','comarca da capital')
+OUTSIDE=( 'acre','rio branco - ac','manaus','amazonas','goias','goiania','rio de janeiro',
+          'belo horizonte','minas gerais','espirito santo','vitoria - es','parana',
+          'curitiba','santa catarina','rio grande do sul','porto alegre',
+          'mato grosso do sul','campo grande - ms','paraiba','ceara','pernambuco',
+          'jandira','suzano','jundiai','campinas','santos','sorocaba',
+          'mogi das cruzes','cotia','carapicuiba','itapevi','franco da rocha')
+DISQUALIFY_TITLE=(
+ 'resultado','gabarito','nota','notas','pontuacao','classificacao',
+ 'convocacao','convocados','nomeacao','nomeados','homologacao','provas realizadas',
+ 'local de prova','prova objetiva','retificacao de resultado',
+ 'mestrado','doutorado','pos-graduacao','vestibular','residencia medica',
+ 'residencia multiprofissional','bolsa de estudo','curso livre','estagio',
+ 'processo seletivo discente','concurso interno','prorrogacao de validade'
+)
+ACADEMIC_TERMS=( 'selecao de alunos','ingresso de alunos','programa de pos-graduacao',
+ 'mestrado','doutorado','vestibular','residencia medica','pos-graduacao stricto sensu',
+ 'especializacao academica','bolsa de estudo','cursos gratuitos',
+ 'concurso literario','concurso cultural','concurso interno')
+CAREERS={
+ 'Medicina':('medico','medica','cirurgiao','clinico geral','pericia medica','medicina'),
+ 'Direito':('procurador','defensor publico','promotor de justica','juiz','magistratura',
+           'oficial de justica','analista judiciario','advogado publico','delegado'),
+ 'Economia e Finanças':('auditor fiscal','auditor de controle','auditor de contas',
+            'analista de financas','economista','analista tributario',
+            'fiscal de tributos','analista de planejamento','analista em planejamento'),
+ 'Geral nível superior':('analista administrativo','analista de gestao','especialista em politicas',
+                           'cargo de nivel superior','nivel superior em qualquer area')
+}
+# Fontes diretas: páginas oficiais de concursos ou mecanismos internos da banca.
+DIRECT_SOURCES=[
+ ('Vunesp - Direito','https://www.vunesp.com.br/?b=PROCURADOR'),
+ ('Vunesp - Medicina','https://www.vunesp.com.br/?b=MEDICO'),
+ ('Vunesp - Auditoria','https://www.vunesp.com.br/?b=AUDITOR'),
+ ('Vunesp - São Paulo','https://www.vunesp.com.br/?b=SAO%20PAULO'),
+ ('Vunesp - Guarulhos','https://www.vunesp.com.br/?b=GUARULHOS'),
+ ('Vunesp - Osasco','https://www.vunesp.com.br/?b=OSASCO'),
+ ('FCC - inscrições abertas','https://www.concursosfcc.com.br/'),
+ ('FGV - concursos','https://conhecimento.fgv.br/concursos'),
 ]
-CAPITAL = ['são paulo', 'sao paulo']
-OTHER_CITIES = [
-    'suzano', 'jandira', 'jundiaí', 'jundiai', 'campinas', 'santos',
-    'sorocaba', 'ribeirão preto', 'ribeirao preto', 'presidente prudente',
-    'bauru', 'cotia', 'carapicuíba', 'carapicuiba', 'embu das artes',
-    'mogi das cruzes', 'praia grande', 'são vicente', 'sao vicente',
+# Motor de descoberta é complementar: os links só são aproveitados DEPOIS de
+# abrir e validar o conteúdo na própria banca ou órgão.
+SITE_QUERIES=[
+ 'site:vunesp.com.br concurso procurador inscricoes 2026',
+ 'site:vunesp.com.br concurso medico inscricoes 2026',
+ 'site:vunesp.com.br concurso auditor inscricoes 2026',
+ 'site:concursosfcc.com.br concurso sao paulo inscricoes 2026',
+ 'site:conhecimento.fgv.br/concursos sao paulo edital 2026',
+ 'site:prefeitura.sp.gov.br concurso publico inscricoes medico procurador 2026',
+ 'site:osasco.sp.gov.br concurso publico inscricoes 2026',
+ 'site:guarulhos.sp.gov.br concurso publico inscricoes 2026',
+ 'site:barueri.sp.gov.br concurso publico inscricoes 2026',
+ 'site:taboaodaserra.sp.gov.br concurso publico inscricoes 2026',
+ 'site:trf3.jus.br concurso publico 2026 inscricoes',
+ 'site:tce.sp.gov.br concurso inscricoes 2026',
 ]
-# Esses termos geralmente identificam seleção acadêmica, NÃO um cargo remunerado.
-ACADEMIC_REJECTION = [
-    'processo seletivo de mestrado', 'seleção para mestrado',
-    'selecao para mestrado', 'inscrições para mestrado', 'inscricoes para mestrado',
-    'vagas para mestrado', 'mestrado profissional', 'mestrado acadêmico',
-    'mestrado academico', 'programa de pós-graduação', 'programa de pos-graduacao',
-    'ingresso no mestrado', 'curso de mestrado', 'doutorado acadêmico',
-    'doutorado academico', 'bolsa de estudo', 'bolsas de estudo',
-    'vestibular', 'processo seletivo discente', 'seleção de alunos',
-    'selecao de alunos', 'residência médica', 'residencia medica',
-    'seleção para residência', 'selecao para residencia', 'pós-graduação lato sensu',
-    'pos-graduacao lato sensu', 'inscrições para cursos', 'inscricoes para cursos',
-    'especialização gratuita', 'especializacao gratuita',
-]
-# Indicadores de cargos, evitando a palavra genérica "concurso" como prova de pertinência.
-JOB_TERMS = [
-    'procurador', 'médico', 'medico', 'cirurgião', 'cirurgiao',
-    'perito', 'auditor', 'fiscal', 'economista', 'defensor público',
-    'defensor publico', 'promotor de justiça', 'promotor de justica',
-    'juiz', 'magistratura', 'analista judiciário', 'analista judiciario',
-    'oficial de justiça', 'oficial de justica', 'delegado', 'advogado',
-    'analista de controle', 'analista tributário', 'analista tributario',
-    'analista administrativo', 'servidor público', 'servidor publico',
-    'nível superior', 'nivel superior', 'cargo público', 'cargo publico',
-    'carreira pública', 'carreira publica',
-]
+MONTHS={'janeiro':1,'fevereiro':2,'marco':3,'abril':4,'maio':5,'junho':6,
+        'julho':7,'agosto':8,'setembro':9,'outubro':10,'novembro':11,'dezembro':12}
+SALARY_RE=re.compile(r'R\$\s*([\d\.]+,\d{2}|\d{4,6})',re.I)
+YEAR_RE=re.compile(r'20(?:2[5-9]|3\d)')
+VUNESP_DETAIL=re.compile(r'^/[A-Z]{3,6}\d{4}(?:/)?$')
 
-MONTHS = {'janeiro':1,'fevereiro':2,'março':3,'marco':3,'abril':4,'maio':5,'junho':6,'julho':7,'agosto':8,'setembro':9,'outubro':10,'novembro':11,'dezembro':12}
-SALARY = re.compile(r'R\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?|\d{4,7}(?:,\d{2})?)', re.I)
-DATE = re.compile(r'\b(?:até|ate|encerra(?:m)?(?: em)?|inscriç(?:ões|oes) até|prazo até)\s*(?:o dia |dia )?(\d{1,2})\s*(?:/|de\s+)(\d{1,2}|[a-zçãé]+)\s*(?:/|de\s+)(20\d{2})\b', re.I)
-BANCA_DOMAINS = ('vunesp.com.br','concursosfcc.com.br','conhecimento.fgv.br','cebraspe.org.br','institutoaocp.org.br','ibfc.org.br','nossorumo.org.br')
-OFFICIAL_DOMAINS = ('gov.br','sp.gov.br','jus.br','leg.br','usp.br','unesp.br','unicamp.br')
-UA = 'RadarConcursos-SP/1.0 (monitoramento público; GitHub Actions)'
 
-def get(url, max_bytes=900_000):
-    req = urllib.request.Request(url, headers={'User-Agent':UA, 'Accept':'application/rss+xml, application/xml, text/html'})
-    with urllib.request.urlopen(req, timeout=18) as response:
-        return response.read(max_bytes).decode('utf-8', errors='replace'), response.geturl()
+def norm(s):
+    return ''.join(c for c in unicodedata.normalize('NFKD',str(s or '').lower())
+                   if not unicodedata.combining(c))
 
-def remove_tags(t):
-    return re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]*>', ' ', t or ''))).strip()
+def words_has(s,term):
+    return bool(re.search(r'(?<!\w)'+re.escape(term)+r'(?!\w)',s))
 
-def rss(q):
-    url = 'https://news.google.com/rss/search?' + urllib.parse.urlencode({'q':q+' when:30d','hl':'pt-BR','gl':'BR','ceid':'BR:pt-419'})
-    raw,_ = get(url)
-    root = ET.fromstring(raw)
+def trusted(url):
+    p=urlparse(url)
+    if p.scheme!='https' or not p.hostname: return False
+    h=p.hostname.lower()
+    return any(h==d or h.endswith('.'+d) for d in TRUSTED_DOMAINS)
+
+def fetch(url):
+    if not trusted(url): raise ValueError('URL não é de fonte permitida')
+    r=SESSION.get(url,timeout=16,allow_redirects=True)
+    r.raise_for_status()
+    if not trusted(r.url): raise ValueError('Redirecionamento externo não permitido')
+    if len(r.content)>3_000_000:raise ValueError('Página acima do limite')
+    if 'pdf' in r.headers.get('content-type','').lower():
+        # PDF é fornecido como link, não tentamos tratá-lo como HTML.
+        return None,r.url
+    return r.text,r.url
+
+def source_links(page,base):
+    soup=BeautifulSoup(page,'html.parser')
     result=[]
-    for node in root.findall('./channel/item'):
-        def field(name):
-            el=node.find(name)
-            return (el.text or '').strip() if el is not None else ''
-        pub=field('pubDate')
-        try: published=parsedate_to_datetime(pub).date()
-        except (ValueError,TypeError): continue
-        if published < TODAY-dt.timedelta(days=30) or published>TODAY+dt.timedelta(days=1):continue
-        result.append({'title':remove_tags(field('title')),'description':remove_tags(field('description')),'url':field('link'),'published':published.isoformat(),'publisher':field('source')})
+    for a in soup.find_all('a',href=True):
+        href=urljoin(base,a.get('href',''))
+        if not trusted(href):continue
+        path=urlparse(href).path
+        label=a.get_text(' ',strip=True)
+        if (VUNESP_DETAIL.match(path) or ('concurso' in norm(href) and len(label)>5)
+            or ('edital' in norm(href) and len(label)>5)):
+            result.append(href)
     return result
 
-def salary_from(t):
-    values=[]
-    for m in SALARY.finditer(t):
-        try: value=float(m.group(1).replace('.','').replace(',','.'))
-        except ValueError:continue
-        if 1000 <= value <= 150000: values.append(value)
-    # Multiple salaries in a general advertisement are ambiguous: show none instead of inventing a specific salary.
-    return values[0] if len(values)==1 else None
+def discover():
+    pool=[]; errors=[]
+    for name,url in DIRECT_SOURCES:
+        try:
+            raw,final=fetch(url)
+            if raw:
+                pool+=source_links(raw,final)
+                # Algumas fontes têm a página do certame como destino direto.
+                if VUNESP_DETAIL.match(urlparse(final).path):pool.append(final)
+        except Exception as e: errors.append(f'{name}: {type(e).__name__}')
+    # Bing RSS entrega URLs de resultado; nunca usamos seu texto como evidência.
+    for query in SITE_QUERIES:
+        try:
+            rss='https://www.bing.com/search?'+urlencode({'q':query,'format':'rss'})
+            response=SESSION.get(rss,timeout=14)
+            response.raise_for_status()
+            soup=BeautifulSoup(response.content,'xml')
+            for node in soup.find_all('item'):
+                link=node.find('link')
+                if link and link.get_text(strip=True) and trusted(link.get_text(strip=True)):
+                    pool.append(link.get_text(strip=True))
+        except Exception as e:errors.append(f'Pesquisa complementar: {type(e).__name__}')
+    # Limite operacional evita milhares de páginas ou bloqueios das fontes.
+    return list(dict.fromkeys(pool))[:240],errors
 
-def deadline_from(t):
-    for m in DATE.finditer(t):
-        mo=m.group(2).lower()
-        mo=int(mo) if mo.isdigit() else MONTHS.get(mo)
-        if mo is None:continue
-        try: d=dt.date(int(m.group(3)),mo,int(m.group(1)))
-        except ValueError:continue
-        if TODAY <= d <= TODAY+dt.timedelta(days=120):return d.isoformat()
+def career(title,body):
+    t=norm(title+' '+body[:900])
+    for name,terms in CAREERS.items():
+        if any(words_has(t,x) for x in terms):return name
     return None
 
-def identify_area(t):
-    t=t.lower(); scores={a:sum(1 for token in words if token in t) for a,words in AREAS.items()}
-    winner=max(scores,key=scores.get)
-    return winner if scores[winner] else 'Geral'
+def parse_date(d,m,y=None):
+    mon=MONTHS.get(norm(m)) if not m.isdigit() else int(m)
+    if not mon:return None
+    year=int(y) if y else TODAY.year
+    try:out=date(year,mon,int(d))
+    except ValueError:return None
+    if not y:
+        # Intervalos com ano omitido em portais; só inferimos ano em janela próxima.
+        if out < TODAY-timedelta(days=75):
+            try:out=out.replace(year=year+1)
+            except ValueError:return None
+    return out
 
-def has_place(text, term):
-    return bool(re.search(r'(?<!\w)' + re.escape(term) + r'(?!\w)', text, re.I))
-
-def loc_from(t):
-    low=t.lower()
-    included=next((city for city in CITY_NAMES if has_place(low,city)),None)
-    outside=next((city for city in OTHER_CITIES if has_place(low,city)),None)
-    if included and outside:
-        return 'Cidades diferentes citadas — conferir lotação','uncertain'
-    if included:
-        return included.title()+' citada — confirmar lotação','capital_abc'
-    if outside:
-        return 'Outra cidade ('+outside.title()+') — fora da região','outside'
-    if any(has_place(low,x) for x in CAPITAL):
-        # "São Paulo" pode referir-se ao ESTADO, não necessariamente à capital.
-        return 'São Paulo citada — confirmar se é capital','uncertain'
-    return 'Lotação a verificar','uncertain'
-
-def relevant(text):
-    """Triagem de notícias: mantém oportunidades para revisão sem inventar requisitos.
-    RSS do Google Notícias costuma trazer título repetido na descrição e não o edital.
-    """
-    low=text.lower()
-    if any(term in low for term in ACADEMIC_REJECTION):
-        return False
-    # Exclusões complementares de ingresso em cursos / vagas de alunos.
-    if any(term in low for term in ('pós-graduação', 'pos-graduacao',
-            'seleção de estudantes', 'selecao de estudantes',
-            'curso gratuito', 'concurso cultural', 'concurso literário')):
-        return False
-    # Não exibir listas de resultados, provas antigas e inscrições já encerradas.
-    if any(phrase in low for phrase in ('inscrições encerradas','inscricoes encerradas',
-            'prazo de inscrição encerrado','prazo de inscricao encerrado',
-            'resultado final publicado','gabarito definitivo',
-            'homologação do resultado','homologacao do resultado')):
-        return False
-    # Identificador genérico de processo seletivo E pelo menos um cargo profissional.
-    public_selection = any(term in low for term in (
-        'concurso', 'edital', 'processo seletivo', 'seleção pública',
-        'selecao publica', 'inscrições abertas', 'inscricoes abertas',
-        'vagas para', 'vagas de'))
-    professional_job = any(term in low for term in JOB_TERMS)
-    return public_selection and professional_job
-
-def url_is_official(url):
-    try: host=urllib.parse.urlparse(url).hostname or ''
-    except Exception:return False
-    return any(host==d or host.endswith('.'+d) for d in OFFICIAL_DOMAINS+BANCA_DOMAINS)
-
-def find_official_links(url):
-    """Enrich *only* when original source resolves to a government/court/university/banca page.
-       HTML anchor text is explicitly validated so generic landing pages aren't labeled edital.
-    """
-    try:
-        page,final=get(url)
-        if not url_is_official(final):return None,None,final
-        links=re.findall(r'<a\b([^>]*\bhref\s*=\s*["\']([^"\']+)["\'][^>]*)>(.*?)</a\s*>',page,re.I|re.S)
-        edital=registration=None
-        for _,href,body in links:
-            address=urllib.parse.urljoin(final,html.unescape(href))
-            if not url_is_official(address) or not address.startswith('https://'):continue
-            anchor=remove_tags(body).lower()
-            if not edital and ('edital' in anchor or 'edital' in href.lower()) and ('pdf' in href.lower() or 'edital' in anchor):edital=address
-            if not registration and any(p in anchor for p in ('inscreva-se','inscrições','inscricao','inscrição','fazer inscrição')):registration=address
-        return edital,registration,final
-    except Exception:return None,None,url
-
-# A etapa seguinte publica SOMENTE inscrições em andamento com informações
-# explícitas. Notícias não verificadas NÃO aparecem no painel do candidato.
-import unicodedata
-
-def normalized(t):
-    return ''.join(c for c in unicodedata.normalize('NFKD', (t or '').lower()) if not unicodedata.combining(c))
-
-NOT_APPLICATION = (
-    'resultado', 'resultados', 'gabarito', 'nota de corte', 'notas da prova',
-    'notas do concurso', 'classificacao', 'classificados', 'convocacao',
-    'convocados', 'homologacao', 'prova aplicada', 'local de prova',
-    'retificacao de resultado', 'concurso anterior', 'concurso passado',
-    'nomeacao', 'nomeados', 'inscricoes encerradas', 'prazo encerrado',
-    'inscricoes prorrogadas em 2025', 'mestrado', 'doutorado',
-    'pos-graduacao', 'vestibular', 'residencia medica', 'curso gratuito',
-    'bolsas de estudo', 'policia civil do acre',
+DATE_TOKEN=r'(\d{1,2})\s*(?:/|de\s+)(\d{1,2}|janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)(?:\s*(?:/|de\s+)(20\d{2}))?'
+DEADLINE_PATTERNS=(
+ re.compile(r'inscricoes?\s+(?:se\s+)?(?:encerram|terminam)\s+em\s+'+DATE_TOKEN,re.I),
+ re.compile(r'(?:inscri(?:c|ç)(?:ao|ões|oes|ões|ao)|inscri(?:c|ç)oes)\s*(?:abertas?\s*)?(?:ate|terminam\s+em|encerram\s+em)\s*(?:o\s+dia\s*)?'+DATE_TOKEN,re.I),
+ re.compile(r'(?:prazo\s+de\s+inscricoes|periodo\s+de\s+inscricoes)[^.\n]{0,100}?(?:ate|a)\s*'+DATE_TOKEN,re.I),
 )
-OPEN_SIGNALS = ('inscricoes abertas', 'inscricao aberta', 'inscreva-se', 'periodo de inscricoes', 'inscricoes ate', 'inscricoes vao ate')
-CITY_STRICT = (
-    'santo andre','sao bernardo do campo','sao caetano do sul','maua',
-    'diadema','ribeirao pires','rio grande da serra','osasco',
-    'taboao da serra','barueri','guarulhos',
-)
-CITY_CAPITAL_SIGNALS = ('sao paulo capital', 'capital paulista', 'cidade de sao paulo', 'municipio de sao paulo', 'prefeitura de sao paulo')
+DATE_SIMPLE=re.compile(r'(\d{1,2})/(\d{1,2})(?:/(20\d{2}))?')
 
-# Permitimos cidade somente quando nomeada explicitamente, não apenas "SP"
-# ou "Estado de São Paulo". Evita aceitar Acre e qualquer outro estado.
-def city_strict(t):
-    x=normalized(t)
-    for c in CITY_STRICT:
-        if has_place(x,c):return c.title()
-    if any(z in x for z in CITY_CAPITAL_SIGNALS):return 'São Paulo (capital)'
+def registration_deadline(text):
+    t=norm(text)
+    # Regra explícita: primeiro uma frase de inscrições com data de encerramento.
+    for regex in DEADLINE_PATTERNS:
+        for match in regex.finditer(t):
+            d=parse_date(*match.groups())
+            if d and TODAY<=d<=TODAY+timedelta(days=130):return d
+    # Formato direto da página específica da Vunesp: 'Inscrições: 28/10 10/12'.
+    p=re.search(r'inscricoes\s*:\s*(\d{1,2}/\d{1,2}(?:/20\d{2})?)\s+(\d{1,2}/\d{1,2}(?:/20\d{2})?)',t)
+    if p:
+        starts=DATE_SIMPLE.fullmatch(p.group(1)); ends=DATE_SIMPLE.fullmatch(p.group(2))
+        if starts and ends:
+            a=parse_date(*starts.groups()); b=parse_date(*ends.groups())
+            if a and b and b<a:
+                b=parse_date(ends.group(1),ends.group(2),str(a.year+1))
+            if a and b and a<=TODAY<=b and b<=TODAY+timedelta(days=130):return b
     return None
 
-def extract_deadline(t):
-    x=normalized(t)
-    patterns=(
-        r'inscricoes?\s+(?:abertas?\s+)?ate\s+(?:o\s+dia\s+)?(\d{1,2})\s*(?:/|de\s+)(\d{1,2}|[a-z]+)\s*(?:/|de\s+)(20\d{2})',
-        r'(?:inscricoes?\s+se\s+encerram|prazo\s+de\s+inscricao\s+termina)\s+(?:em|no\s+dia)\s+(\d{1,2})\s*(?:/|de\s+)(\d{1,2}|[a-z]+)\s*(?:/|de\s+)(20\d{2})',
-    )
-    for pat in patterns:
-        for m in re.finditer(pat,x,re.I):
-            mon=m.group(2)
-            mon=int(mon) if mon.isdigit() else MONTHS.get(mon)
-            if not mon:continue
-            try: date=dt.date(int(m.group(3)),mon,int(m.group(1)))
-            except ValueError:continue
-            if TODAY <= date <= TODAY+dt.timedelta(days=120):return date.isoformat()
-    return None
+def salary_for_job(title,text):
+    t=norm(text)
+    # Em editais com vários cargos, o maior salário é FAIXA, não é salário do cargo alvo.
+    if 'faixa salarial' in t or 'salarios de r$' in t or 'salarios entre' in t:
+        return None,'Faixa salarial de vários cargos: conferir salário do cargo'
+    matches=[]
+    for m in SALARY_RE.finditer(text):
+        try:n=float(m.group(1).replace('.','').replace(',','.'))
+        except ValueError:continue
+        if 1000<=n<=150000:matches.append(n)
+    amounts=sorted(set(matches))
+    if len(amounts)==1:return amounts[0],None
+    if len(amounts)>1:return None,'Múltiplos valores: não é possível atribuir ao cargo'
+    return None,'Salário não informado na página'
 
-def application_signal(title, body):
-    title_n=normalized(title); combined=normalized(title+' '+body)
-    # A notícia precisa anunciar INSCRIÇÕES, e não resultados de um concurso.
-    if any(term in title_n for term in NOT_APPLICATION):return False
-    if not any(term in combined for term in OPEN_SIGNALS):return False
-    if not any(term in combined for term in ('concurso publico','concurso para','edital de concurso','processo seletivo publico')):return False
-    if not any(normalized(word) in combined for word in JOB_TERMS):return False
+def location(title,text):
+    t=norm(title+' '+text[:900]); head=norm(title+' '+text[:480])
+    # Prefeitura indica cidade do órgão, mas prova em cidade não garante lotação.
+    match=re.search(r'prefeitura\s+(?:municipal\s+)?de\s+([a-z\s]+?)(?:\s*[-–|:]|\s*\(|$)',head)
+    if match:
+        candidate=match.group(1).strip()
+        for city,label in CITIES.items():
+            if candidate==city or candidate.startswith(city+' '):return label,'municipal'
+    if any(x in head for x in CAPITAL_MARKERS):return 'São Paulo (capital)','capital'
+    seen=[label for city,label in CITIES.items() if city!='sao paulo' and words_has(t,city)]
+    seen=list(dict.fromkeys(seen))
+    if len(seen)==1:
+        # Citação da cidade não comprova lotação; sempre revisão.
+        return seen[0],'citada'
+    return 'Lotação não confirmada','indefinida'
+
+def open_links(soup,url):
+    edital=inscricao=None
+    for a in soup.find_all('a',href=True):
+        link=urljoin(url,a.get('href',''))
+        if not trusted(link):continue
+        label=norm(a.get_text(' ',strip=True))
+        if not edital and ('edital de abertura' in label or 'edital completo' in label or (label=='edital')):
+            edital=link
+        if not inscricao and any(s in label for s in ('inscreva-se','fazer inscricao','realizar inscricao','inscricoes online','inscricao')):
+            if 'resultado' not in label:inscricao=link
+    return edital,inscricao
+
+def selection_context(title,body):
+    title_norm=norm(title)
+    body_norm=norm(body)
+    if any(words_has(title_norm,x) for x in DISQUALIFY_TITLE):return False
+    if any(x in title_norm[:280] for x in ACADEMIC_TERMS):return False
+    if not any(t in body_norm[:2400] for t in ('concurso publico','concurso de provas','concurso para',
+                                              'edital de abertura','inscricoes:','inscricoes abertas',
+                                              'processo seletivo publico')):
+        return False
     return True
 
+def review_page(url):
+    raw,final=fetch(url)
+    if not raw:return None
+    soup=BeautifulSoup(raw,'html.parser')
+    for tag in soup(['script','style','nav','footer','header','noscript']):tag.decompose()
+    title_tag=soup.find('h1') or soup.find('h2') or soup.find('title')
+    title=title_tag.get_text(' ',strip=True)[:220] if title_tag else ''
+    title=title or urlparse(final).path.strip('/')
+    text=soup.get_text(' ',strip=True)
+    text=re.sub(r'\s+',' ',text)[:20000]
+    if not selection_context(title,text):return None
+    group=career(title,text)
+    if not group:return None
+    # Não aceita resultado ou prazo expirado como inscrição.
+    ntitle=norm(title)
+    if any(words_has(ntitle,k) for k in DISQUALIFY_TITLE):return None
+    end=registration_deadline(text)
+    if not end:return None
+    loc,loc_type=location(title,text)
+    salary,why=salary_for_job(title,text)
+    edital,registration=open_links(soup,final)
+    if 'vunesp.com.br' in urlparse(final).netloc:registration=registration or final
+    # Critério conservador: órgão municipal localizado + remuneração exata.
+    # Citação geográfica e salários gerais/ambíguos ficam apenas em revisão.
+    confirmed=(loc_type in ('municipal','capital') and salary is not None
+               and salary>=MIN_SALARY and bool(registration))
+    if salary is not None and salary<MIN_SALARY:return None
+    status='apto_para_conferencia' if confirmed else 'revisao'
+    reason=[]
+    if not confirmed:
+        if loc_type not in ('municipal','capital'):reason.append('Cidade de exercício não comprovada')
+        if salary is None:reason.append(why or 'Salário a conferir')
+        if not registration:reason.append('Link de inscrição não localizado')
+    # Descarta candidaturas sem sequer localidade plausível, inclusive concursos de outro estado.
+    nt=norm(title+' '+text[:900])
+    if loc_type=='indefinida':return None
+    if any(words_has(norm(title),c) for c in OUTSIDE) and loc_type not in ('municipal','capital'):return None
+    # Link oficial e título, não texto de manchete de terceiros.
+    item={
+        'id':hashlib.sha256(final.encode()).hexdigest()[:16],
+        'title':title,'organizer':urlparse(final).hostname or '',
+        'area':group,'salary':salary,'deadline':end.isoformat(),
+        'location':loc,'location_status':'capital_abc' if loc_type in ('municipal','capital') else 'uncertain',
+        'status':status, 'reason':'; '.join(reason),
+        'summary':'Verifique o edital original para requisitos, inscrição e lotação.',
+        'source_url':final,'edital_url':edital,'registration_url':registration,
+        'published':TODAY.isoformat()
+    }
+    return item
+
 def main():
-    found=[];errors=[]
+    links,errors=discover()
+    approved=[];review=[];discarded=0
+    def get_one(url):
+        try:return review_page(url),None
+        except Exception as ex:return None,type(ex).__name__
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
-        futures={pool.submit(rss,q):q for q in QUERIES}
-        for future in concurrent.futures.as_completed(futures):
-            try:found.extend(future.result())
-            except Exception as ex:errors.append(f'{futures[future]}: {type(ex).__name__}')
-    unique={}
-    for article in found:
-        if article['url']:unique.setdefault(article['url'],article)
-    candidates=[]
-    rejects={'nao_e_inscricao_aberta':0,'sem_cidade_confirmada':0,'sem_prazo_valido':0,'sem_salario_confirmado':0,'sem_fonte_oficial':0}
-    for r in unique.values():
-        headline=r['title']; snippet=r['description']; txt=headline+' '+snippet
-        if not application_signal(headline,snippet):
-            rejects['nao_e_inscricao_aberta']+=1;continue
-        # Endereço de trabalho tem que ser inequívoco já no anúncio.
-        city=city_strict(txt)
-        if city is None:
-            rejects['sem_cidade_confirmada']+=1;continue
-        deadline=extract_deadline(txt)
-        if not deadline:
-            rejects['sem_prazo_valido']+=1;continue
-        amount=salary_from(txt)
-        if amount is None or amount < 12000:
-            rejects['sem_salario_confirmado']+=1;continue
-        # O link do Google Notícias pode apontar para uma reportagem.
-        # Exibimos apenas quando a URL final é de órgão/banca oficial.
-        edital,registration,final=find_official_links(r['url'])
-        if not url_is_official(final):
-            rejects['sem_fonte_oficial']+=1;continue
-        rid=hashlib.sha256((headline.lower()+final).encode('utf8')).hexdigest()[:16]
-        candidates.append({
-            'id':rid,'title':headline[:175], 'organizer':r['publisher'][:100],
-            'area':identify_area(txt),'salary':amount,'deadline':deadline,
-            'status':'prazo_identificado','location':city+' — confirmar unidade no edital',
-            'location_status':'capital_abc','summary':snippet[:260],
-            'source_url':final,'edital_url':edital,'registration_url':registration,
-            'published':r['published']
-        })
-    candidates.sort(key=lambda x:x['published'],reverse=True)
-    note=('Filtro conservador: somente notícias com prazo de inscrição vigente, salário >= R$ 12 mil, cidade explícita e fonte oficial. '
-          'A presença no painel NÃO comprova a lotação ou a elegibilidade: confira sempre o edital. '
-          'O radar pode omitir concursos reais por falta de informação na notícia.')
-    if errors:note+=f' {len(errors)} consultas falharam.'
-    result={'updated_at':dt.datetime.now(dt.timezone.utc).isoformat(),'note':note,'items':candidates[:150]}
-    DATA.parent.mkdir(exist_ok=True,parents=True)
-    DATA.write_text(json.dumps(result,indent=2,ensure_ascii=False)+'\n',encoding='utf8')
-    print(f'{len(found)} notícias, {len(unique)} únicas, {len(candidates)} anúncios com evidência de inscrição, {len(errors)} erros; descartes: {rejects}')
+        for result,err in pool.map(get_one,links):
+            if err:errors.append(err)
+            if not result:discarded+=1;continue
+            (approved if result['status']=='apto_para_conferencia' else review).append(result)
+    approved.sort(key=lambda x:(x['deadline'],x['title']))
+    review.sort(key=lambda x:(x['deadline'],x['title']))
+    data={
+        'updated_at':datetime.now(timezone.utc).isoformat(),
+        'note':'Fontes oficiais e bancas. As vagas em destaque passaram por validação automatizada; confira edital, cargo, salário, lotação e disponibilidade antes de se inscrever. A coleta não é exaustiva.',
+        'items':approved,
+        'review':review,
+        'stats':{'links_oficiais_analisados':len(links),'destaques':len(approved),
+                 'revisao':len(review),'descartados':discarded,'falhas':len(errors)},
+        'source_errors':errors[:15],
+    }
+    OUTPUT.parent.mkdir(parents=True,exist_ok=True)
+    OUTPUT.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+    print('Páginas oficiais:',len(links),'destaques:',len(approved),'revisão:',len(review),
+          'descartadas:',discarded,'falhas:',len(errors))
+    if errors:print('Falhas parciais:', '; '.join(errors[:6]))
 
 if __name__=='__main__':main()
