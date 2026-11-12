@@ -475,13 +475,13 @@ def discover_news():
         except Exception as exc:
             errors.append('Notícias: '+type(exc).__name__)
     print('RSS notícias examinadas:',rss_total,'exemplos:',examples)
-    return leads[:100],errors
+    return leads[:100],errors,{'rss_items':rss_total,'sample_titles':examples}
 
 def main():
     links,errors=discover()
     print('Amostra páginas:',links[:8])
     approved=[];review=[];discarded=0
-    news,news_errors=discover_news()
+    news,news_errors,news_diagnostic=discover_news()
     errors.extend(news_errors)
     def get_one(url):
         try:return review_page(url),None
@@ -507,6 +507,7 @@ def main():
         'stats':{'links_oficiais_analisados':len(links),'noticias_triadas':len(news),'destaques':len(approved),
                  'revisao':len(review),'descartados':discarded,'falhas':len(errors)},
         'source_errors':errors[:15],
+        'news_diagnostic':news_diagnostic,
         'diagnostico_descartes':dict(DIAG),
         'limitations':['Automação de triagem; a aprovação depende de leitura do edital.', 'Portais podem bloquear acessos e não expor PDFs de modo automatizado.'],
     }
