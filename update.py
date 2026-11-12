@@ -477,6 +477,30 @@ def discover_news():
     print('RSS notícias examinadas:',rss_total,'exemplos:',examples)
     return leads[:100],errors,{'rss_items':rss_total,'sample_titles':examples}
 
+
+def verified_watchlist():
+    """Editais pesquisados em fontes oficiais; expiram automaticamente."""
+    known=[
+      {
+        'id':'trf3-oficial-justica-2026-sp',
+        'title':'TRF3 — Analista Judiciário, Oficial de Justiça Avaliador Federal (classificação SP)',
+        'organizer':'TRF3 / Fundação Vunesp',
+        'area':'Direito',
+        'salary':20013.11,
+        'deadline':'2026-11-23',
+        'location':'Seção Judiciária de São Paulo — lotação exata não garantida',
+        'location_status':'uncertain',
+        'status':'revisao',
+        'reason':'Cargo com cadastro de reserva. Unidade de classificação SP não garante lotação na capital ou ABC. Conferir requisitos, edital e lotação antes da inscrição. Informação oficial consultada em 12/11/2026.',
+        'summary':'Graduação em Direito. Inscrições de 04/11/2026 até 23/11/2026; salário inicial bruto R$ 20.013,11. Cadastro de reserva em SP.',
+        'source_url':'https://web.trf3.jus.br/noticias-sjsp/Noticiar/ExibirNoticia/2450-trf3-divulga-edital-de-concurso-para-servidores',
+        'edital_url':'https://www.vunesp.com.br/TRFT2601',
+        'registration_url':'https://www.vunesp.com.br/TRFT2601',
+        'published':'2026-11-12'
+      }
+    ]
+    return [x for x in known if x['deadline']>=TODAY.isoformat()]
+
 def main():
     links,errors=discover()
     print('Amostra páginas:',links[:8])
@@ -491,6 +515,8 @@ def main():
             if err:errors.append(err)
             if not result:discarded+=1;continue
             (approved if result['status']=='apto_para_conferencia' else review).append(result)
+    # Editais de referência verificados em páginas oficiais, com expiração.
+    review.extend(verified_watchlist())
     # Notícias ficam somente em revisão, nunca em destaque.
     existing={(norm(x['title']),norm(x['location'])) for x in approved+review}
     for lead in news:
