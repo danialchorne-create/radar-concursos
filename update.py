@@ -6,6 +6,8 @@ Este script não substitui a leitura de edital e não garante cobertura exaustiv
 """
 from __future__ import annotations
 import concurrent.futures
+from collections import Counter
+from threading import Lock
 from datetime import datetime, date, timedelta, timezone
 from email.utils import parsedate_to_datetime
 import hashlib
@@ -25,6 +27,11 @@ BRT=timezone(timedelta(hours=-3))
 TODAY=datetime.now(BRT).date()
 MIN_SALARY=12000
 USER_AGENT='RadarConcursosSP/4.0 (public-edital-monitor; GitHub Actions)'
+DIAG=Counter()
+DIAG_LOCK=Lock()
+def rejected(reason):
+    with DIAG_LOCK: DIAG[reason] += 1
+    return None
 SESSION=requests.Session()
 SESSION.headers.update({'User-Agent':USER_AGENT,'Accept-Language':'pt-BR,pt;q=0.9'})
 TRUSTED_DOMAINS=(
@@ -268,7 +275,7 @@ def selection_context(title,body):
 
 def review_page(url):
     raw,final=fetch(url)
-    if not raw:return None
+    if not raw:return rejected("pagina_sem_html")
     soup=BeautifulSoup(raw,'html.parser')
     for tag in soup(['script','style','nav','footer','header','noscript']):tag.decompose()
     title_tag=soup.find('h1') or soup.find('h2') or soup.find('title')
@@ -276,14 +283,14 @@ def review_page(url):
     title=title or urlparse(final).path.strip('/')
     text=soup.get_text(' ',strip=True)
     text=re.sub(r'\s+',' ',text)[:20000]
-    if not selection_context(title,text):return None
+    if not selection_context(title,text):return rejected("sem_contexto_de_concurso_ou_resultado")
     group=career(title,text)
-    if not group:return None
+    if not group:return rejected("cargo_nao_identificado")
     # Não aceita resultado ou prazo expirado como inscrição.
     ntitle=norm(title)
-    if any(words_has(ntitle,k) for k in DISQUALIFY_TITLE):return None
+    if any(words_has(ntitle,k) for k in DISQUALIFY_TITLE):return rejected("pagina_de_resultado_ou_curso")
     end=registration_deadline(text)
-    if not end:return None
+    if not end:return rejected("prazo_de_inscricao_nao_identificado")
     loc,loc_type=location(title,text)
     salary,why=salary_for_job(title,text)
     edital,registration=open_links(soup,final)
@@ -292,7 +299,7 @@ def review_page(url):
     # Citação geográfica e salários gerais/ambíguos ficam apenas em revisão.
     confirmed=(loc_type in ('municipal','capital') and salary is not None
                and salary>=MIN_SALARY and bool(registration))
-    if salary is not None and salary<MIN_SALARY:return None
+    if salary is not None and salary<MIN_SALARY:return rejected("salario_inferior_ao_piso")
     status='apto_para_conferencia' if confirmed else 'revisao'
     reason=[]
     if not confirmed:
@@ -301,8 +308,8 @@ def review_page(url):
         if not registration:reason.append('Link de inscrição não localizado')
     # Descarta candidaturas sem sequer localidade plausível, inclusive concursos de outro estado.
     nt=norm(title+' '+text[:900])
-    if loc_type=='indefinida':return None
-    if any(words_has(norm(title),c) for c in OUTSIDE) and loc_type not in ('municipal','capital'):return None
+    if loc_type=='indefinida':return rejected("lotacao_sem_cidade_permitida")
+    if any(words_has(norm(title),c) for c in OUTSIDE) and loc_type not in ('municipal','capital'):return rejected("cidade_fora_da_regiao")
     # Link oficial e título, não texto de manchete de terceiros.
     item={
         'id':hashlib.sha256(final.encode()).hexdigest()[:16],
@@ -337,11 +344,13 @@ def main():
         'stats':{'links_oficiais_analisados':len(links),'destaques':len(approved),
                  'revisao':len(review),'descartados':discarded,'falhas':len(errors)},
         'source_errors':errors[:15],
+        'diagnostico_descartes':dict(DIAG),
     }
     OUTPUT.parent.mkdir(parents=True,exist_ok=True)
     OUTPUT.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     print('Páginas oficiais:',len(links),'destaques:',len(approved),'revisão:',len(review),
           'descartadas:',discarded,'falhas:',len(errors))
+    print('Motivos dos descartes:', json.dumps(dict(DIAG), ensure_ascii=False))
     if errors:print('Falhas parciais:', '; '.join(errors[:6]))
 
 if __name__=='__main__':main()
