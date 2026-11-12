@@ -1,5 +1,21 @@
 {
-  "updated_at": "2026-11-11T22:47:44.841638+00:00",
-  "note": "Filtro conservador: somente notícias com prazo de inscrição vigente, salário >= R$ 12 mil, cidade explícita e fonte oficial. A presença no painel NÃO comprova a lotação ou a elegibilidade: confira sempre o edital. O radar pode omitir concursos reais por falta de informação na notícia.",
-  "items": []
+  "updated_at": "2026-11-12T02:28:57.188387+00:00",
+  "note": "Fontes oficiais e bancas. As vagas em destaque passaram por validação automatizada; confira edital, cargo, salário, lotação e disponibilidade antes de se inscrever. A coleta não é exaustiva.",
+  "items": [],
+  "review": [],
+  "stats": {
+    "links_oficiais_analisados": 60,
+    "destaques": 0,
+    "revisao": 0,
+    "descartados": 60,
+    "falhas": 6
+  },
+  "source_errors": [
+    "Vunesp - Direito: HTTPError",
+    "Vunesp - Medicina: HTTPError",
+    "Vunesp - Auditoria: HTTPError",
+    "Vunesp - São Paulo: HTTPError",
+    "Vunesp - Guarulhos: HTTPError",
+    "Vunesp - Osasco: HTTPError"
+  ]
 }
