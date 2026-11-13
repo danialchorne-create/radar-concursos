@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-12T22:43:57.110215+00:00",
+  "updated_at": "2026-11-13T10:56:07.779051+00:00",
   "note": "Fontes oficiais e bancas. As vagas em destaque passaram por validação automatizada; confira edital, cargo, salário, lotação e disponibilidade antes de se inscrever. A coleta não é exaustiva.",
   "items": [],
   "review": [
@@ -35,7 +35,7 @@
       "source_url": "https://news.google.com/rss/articles/CBMiuAFBVV95cUxPLVRJRDRhaVV0MWNjWUFoVEhfZ0FNN1g0YzBaRm9pM2VROFJMOUdPRFRQYUFnOHBfVnluSzVxZDVXZWJlVkVhaXJTcVN3UzZRYmVSN0c5VEQxRW9VMUUwb1k3SDJ0WUZDX2Z2alhKWWdzbG1CaEpQQkVka3cwUzlGOE1EelFlUjFHSTNlQ0RzR05HU00zLVBxV08zX1k4N1hWSzNZdFdZS0FWcm4zZG45UUh0eXp3N09v?oc=5",
       "edital_url": null,
       "registration_url": null,
-      "published": "2026-11-12"
+      "published": "2026-11-13"
     }
   ],
   "stats": {
@@ -56,14 +56,14 @@
     "FCC - inscrições abertas: SSLError"
   ],
   "news_diagnostic": {
-    "rss_items": 363,
+    "rss_items": 360,
     "sample_titles": [
       "USP abre concurso público para médico-veterinário na área de animais de experimentação - - CRMV-RJ",
+      "Concursos Saúde 2026: vagas previstas e remunerações atrativas! - Blog Gran Cursos Online",
       "HCFMRP - USP abre concurso público para médico na área de alergia e imunologia - PCI Concursos",
       "Concurso Prefeitura de Monteiro Lobato-SP abre vagas de R$ 7,4 mil - Ache Concursos",
       "Prefeitura de Corumbataí SP abre concurso com 13 vagas e cadastro de reserva - Qconcursos Folha Dirigida",
-      "Concurso da PM de SP: inscrição para 2 mil vagas vai até 22 de dezembro; pedidos de isenção ou redução de taxa devem ser feitos at",
-      "Concurso INSS: 10 mil + 2 mil vagas solicitadas. Acompanhe! - Blog Gran Cursos Online"
+      "Concurso da PM de SP: inscrição para 2 mil vagas vai até 22 de dezembro; pedidos de isenção ou redução de taxa devem ser feitos at"
     ]
   },
   "diagnostico_descartes": {
