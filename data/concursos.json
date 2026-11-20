@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-20T10:58:18.903716+00:00",
+  "updated_at": "2026-11-20T22:45:00.426619+00:00",
   "note": "Fontes oficiais e bancas. As vagas em destaque passaram por validação automatizada; confira edital, cargo, salário, lotação e disponibilidade antes de se inscrever. A coleta não é exaustiva.",
   "items": [],
   "review": [
@@ -56,7 +56,7 @@
     "FCC - inscrições abertas: SSLError"
   ],
   "news_diagnostic": {
-    "rss_items": 348,
+    "rss_items": 327,
     "sample_titles": [
       "USP abre concurso público para médico-veterinário na área de animais de experimentação - - CRMV-RJ",
       "HCFMRP - USP abre concurso público para médico na área de alergia e imunologia - PCI Concursos",
@@ -67,9 +67,9 @@
     ]
   },
   "diagnostico_descartes": {
-    "cargo_nao_identificado": 137,
-    "prazo_de_inscricao_nao_identificado": 27,
-    "sem_contexto_de_concurso_ou_resultado": 76
+    "cargo_nao_identificado": 136,
+    "sem_contexto_de_concurso_ou_resultado": 77,
+    "prazo_de_inscricao_nao_identificado": 27
   },
   "limitations": [
     "Automação de triagem; a aprovação depende de leitura do edital.",
